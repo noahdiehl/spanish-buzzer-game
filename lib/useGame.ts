@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClientMsg, GameState, ServerMsg } from "./types";
 
+const TOKEN_KEY = "spanish-buzzer-token";
+
 export function useGame(role: "board" | "player" = "player") {
   const [state, setState] = useState<GameState | null>(null);
   const [youAreTeamId, setYouAreTeamId] = useState<number | null>(null);
@@ -20,6 +22,13 @@ export function useGame(role: "board" | "player" = "player") {
       ws.onopen = () => {
         if (cancelled) return;
         setConnected(true);
+        // If we have a saved token (player only), try to resume our team.
+        if (role === "player") {
+          try {
+            const token = localStorage.getItem(TOKEN_KEY);
+            if (token) ws.send(JSON.stringify({ type: "resume", token }));
+          } catch {}
+        }
       };
       ws.onmessage = (ev) => {
         try {
@@ -27,6 +36,8 @@ export function useGame(role: "board" | "player" = "player") {
           if (msg.type === "state") {
             setState(msg.state);
             setYouAreTeamId(msg.youAreTeamId);
+          } else if (msg.type === "token") {
+            try { localStorage.setItem(TOKEN_KEY, msg.token); } catch {}
           } else if (msg.type === "error") {
             setError(msg.message);
           }
@@ -60,4 +71,8 @@ export function useGame(role: "board" | "player" = "player") {
   }
 
   return { state, youAreTeamId, error, connected, send };
+}
+
+export function clearStoredToken() {
+  try { localStorage.removeItem(TOKEN_KEY); } catch {}
 }

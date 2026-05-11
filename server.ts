@@ -1,5 +1,6 @@
 import { createServer } from "http";
 import { parse } from "url";
+import { randomUUID } from "crypto";
 import next from "next";
 import { WebSocketServer, WebSocket } from "ws";
 import type { ClientMsg, GameState, ServerMsg, Team, ModifierKey } from "./lib/types";
@@ -16,14 +17,18 @@ const handle = app.getRequestHandler();
 const TIMER_MS = 15000;
 const TICK_MS = 100;
 const DEMORA_MS = 4000;
+const COUNTDOWN_MS = 3000;
 const WHEEL_EVERY = 3;
 
 interface ClientInfo {
   ws: WebSocket;
   teamId: number | null;
+  token: string | null;
 }
 
 const clients = new Set<ClientInfo>();
+// token -> teamId, persists across player disconnects so refresh restores the slot
+const tokenToTeam = new Map<string, number>();
 
 function freshState(): GameState {
   return {
@@ -85,6 +90,39 @@ function startTimer(resume: boolean = false) {
   }, TICK_MS);
 }
 
+function startCountdown() {
+  stopTimer();
+  state.phase = "countdown";
+  state.timerMs = COUNTDOWN_MS;
+  state.question = QUESTIONS[state.questionIdx] ?? "(no more questions)";
+  state.buzzedTeamId = null;
+  state.answeredWrong = [];
+  state.lockedTeamId = null;
+  state.lockedMs = 0;
+  tickInterval = setInterval(() => {
+    state.timerMs -= TICK_MS;
+    if (state.timerMs <= 0) {
+      stopTimer();
+      _enterQuestionAfterCountdown();
+    }
+    broadcast();
+  }, TICK_MS);
+}
+
+function _enterQuestionAfterCountdown() {
+  state.phase = "question";
+  state.lastJudgment = null;
+  if (state.modifier === "demora" && state.teams.length > 0) {
+    const victim = state.teams[Math.floor(Math.random() * state.teams.length)];
+    state.lockedTeamId = victim.id;
+    state.lockedMs = DEMORA_MS;
+  } else {
+    state.lockedTeamId = null;
+    state.lockedMs = 0;
+  }
+  startTimer(false);
+}
+
 function applyCorrectScore(team: Team, mod: ModifierKey | null) {
   switch (mod) {
     case "doble":   team.score = team.score * 2; break;
@@ -95,21 +133,8 @@ function applyCorrectScore(team: Team, mod: ModifierKey | null) {
 }
 
 function startQuestion() {
-  state.question = QUESTIONS[state.questionIdx] ?? "(no more questions)";
-  state.phase = "question";
-  state.buzzedTeamId = null;
-  state.lastJudgment = null;
-  state.answeredWrong = [];
-  // DELAY: pick a random team to lock for 4 seconds
-  if (state.modifier === "demora" && state.teams.length > 0) {
-    const victim = state.teams[Math.floor(Math.random() * state.teams.length)];
-    state.lockedTeamId = victim.id;
-    state.lockedMs = DEMORA_MS;
-  } else {
-    state.lockedTeamId = null;
-    state.lockedMs = 0;
-  }
-  startTimer(false);
+  // Always go through the 3-second countdown so scores can slide out etc.
+  startCountdown();
 }
 
 function beginNextRound() {
@@ -173,6 +198,47 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       };
       state.teams.push(team);
       client.teamId = id;
+      // Issue a reconnect token
+      const token = randomUUID();
+      client.token = token;
+      tokenToTeam.set(token, id);
+      const tokenMsg: ServerMsg = { type: "token", token };
+      client.ws.send(JSON.stringify(tokenMsg));
+      broadcast();
+      return;
+    }
+    case "resume": {
+      if (client.teamId !== null) return; // already attached
+      const teamId = tokenToTeam.get(msg.token);
+      if (teamId === undefined) return; // bad token
+      const team = state.teams.find((t) => t.id === teamId);
+      if (!team) {
+        tokenToTeam.delete(msg.token);
+        return;
+      }
+      client.teamId = teamId;
+      client.token = msg.token;
+      team.connected = true;
+      broadcast();
+      return;
+    }
+    case "endGame": {
+      stopTimer();
+      state.phase = "ended";
+      state.modifier = null;
+      state.wheelResult = null;
+      state.buzzedTeamId = null;
+      state.answeredWrong = [];
+      state.lockedTeamId = null;
+      state.lockedMs = 0;
+      broadcast();
+      return;
+    }
+    case "setScore": {
+      const team = state.teams.find((t) => t.id === msg.teamId);
+      if (!team) return;
+      const s = Math.max(0, Math.floor(msg.score));
+      team.score = isFinite(s) ? s : 0;
       broadcast();
       return;
     }
@@ -314,7 +380,8 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
     case "reset": {
       stopTimer();
       Object.assign(state, freshState());
-      for (const c of clients) c.teamId = null;
+      tokenToTeam.clear();
+      for (const c of clients) { c.teamId = null; c.token = null; }
       broadcast();
       return;
     }
@@ -330,13 +397,14 @@ app.prepare().then(() => {
   const wss = new WebSocketServer({ server, path: "/ws" });
 
   wss.on("connection", (ws, req) => {
-    const client: ClientInfo = { ws, teamId: null };
+    const client: ClientInfo = { ws, teamId: null, token: null };
     clients.add(client);
 
     if (req.url && req.url.includes("role=board")) {
       stopTimer();
       Object.assign(state, freshState());
-      for (const c of clients) c.teamId = null;
+      tokenToTeam.clear();
+      for (const c of clients) { c.teamId = null; c.token = null; }
     }
 
     const initial: ServerMsg = { type: "state", state, youAreTeamId: null };
@@ -354,27 +422,9 @@ app.prepare().then(() => {
     ws.on("close", () => {
       clients.delete(client);
       if (client.teamId !== null) {
-        const droppedId = client.teamId;
-        state.teams = state.teams
-          .filter((t) => t.id !== droppedId)
-          .map((t, i) => ({ ...t, id: i }));
-        for (const c of clients) {
-          if (c.teamId === null) continue;
-          if (c.teamId === droppedId) c.teamId = null;
-          else if (c.teamId > droppedId) c.teamId -= 1;
-        }
-        if (state.buzzedTeamId === droppedId) {
-          state.buzzedTeamId = null;
-          if (state.phase === "buzzed") state.phase = "question";
-        } else if (state.buzzedTeamId !== null && state.buzzedTeamId > droppedId) {
-          state.buzzedTeamId -= 1;
-        }
-        // clean answeredWrong list of dropped IDs
-        state.answeredWrong = state.answeredWrong
-          .filter((id) => id !== droppedId)
-          .map((id) => (id > droppedId ? id - 1 : id));
-        if (state.lockedTeamId === droppedId) state.lockedTeamId = null;
-        else if (state.lockedTeamId !== null && state.lockedTeamId > droppedId) state.lockedTeamId -= 1;
+        // Keep the team alive — just mark disconnected so they can reconnect with cookie token.
+        const team = state.teams.find((t) => t.id === client.teamId);
+        if (team) team.connected = false;
       }
       broadcast();
     });

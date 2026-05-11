@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useState } from "react";
 import { useGame } from "@/lib/useGame";
 import { AnimatePresence, motion } from "framer-motion";
 import styles from "./board.module.css";
@@ -10,6 +11,16 @@ const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
 
 export default function MainBoard() {
   const { state, send, connected } = useGame("board");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [scoreOpen, setScoreOpen] = useState(false);
+  const [draftScores, setDraftScores] = useState<Record<number, string>>({});
+
+  // Auto-advance the reveal screen after 1.5s so the host doesn't have to click NEXT every round.
+  useEffect(() => {
+    if (state?.phase !== "reveal") return;
+    const t = setTimeout(() => send({ type: "next" }), 1500);
+    return () => clearTimeout(t);
+  }, [state?.phase, send]);
 
   if (!state) {
     return <div className={styles.center}>{connected ? "LOADING..." : "CONNECTING..."}</div>;
@@ -19,11 +30,44 @@ export default function MainBoard() {
   const danger = state.phase === "question" && state.timerMs <= 5000;
   const hideTimer = state.modifier === "mudo";
   const activeMod = state.modifier ? MODIFIERS.find((m) => m.key === state.modifier) : null;
+  // Hide top scores during countdown + question + buzzed (slide them out).
+  const scoresHidden =
+    state.phase === "countdown" ||
+    state.phase === "question" ||
+    state.phase === "buzzed";
+
+  function openEditScores() {
+    if (!state) return;
+    const draft: Record<number, string> = {};
+    for (const t of state.teams) draft[t.id] = String(t.score);
+    setDraftScores(draft);
+    setScoreOpen(true);
+    setMenuOpen(false);
+  }
+
+  function saveScores() {
+    if (!state) return;
+    for (const t of state.teams) {
+      const v = parseInt(draftScores[t.id] ?? "0", 10);
+      if (!isNaN(v) && v !== t.score) send({ type: "setScore", teamId: t.id, score: v });
+    }
+    setScoreOpen(false);
+  }
+
+  // Sort teams by score for the podium
+  const podium = [...state.teams].sort((a, b) => b.score - a.score);
 
   return (
     <div className={styles.board}>
-      {/* TEAM BOXES */}
-      <div className={styles.teamRow}>
+      {/* TEAM BOXES — slide up/out during countdown/question/buzzed */}
+      <motion.div
+        className={styles.teamRow}
+        animate={{
+          y: scoresHidden ? -160 : 0,
+          opacity: scoresHidden ? 0 : 1,
+        }}
+        transition={{ type: "spring", stiffness: 180, damping: 22 }}
+      >
         {[0, 1, 2, 3].map((i) => {
           const team = state.teams.find((t) => t.id === i);
           const color = TEAM_COLORS[i];
@@ -82,7 +126,60 @@ export default function MainBoard() {
             </motion.div>
           );
         })}
+      </motion.div>
+
+      {/* HAMBURGER MENU */}
+      <div className={styles.menuWrap}>
+        <button className={styles.hamburger} onClick={() => setMenuOpen(!menuOpen)} aria-label="menu">
+          <span /><span /><span />
+        </button>
+        <AnimatePresence>
+          {menuOpen && (
+            <motion.div
+              className={styles.menuPanel}
+              initial={{ opacity: 0, y: -8, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.95 }}
+            >
+              <button onClick={() => { send({ type: "reset" }); setMenuOpen(false); }}>RESET GAME</button>
+              <button onClick={() => { send({ type: "endGame" }); setMenuOpen(false); }}>END GAME</button>
+              <button onClick={openEditScores}>EDIT SCORES</button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
+
+      {/* EDIT SCORES PANEL */}
+      <AnimatePresence>
+        {scoreOpen && (
+          <motion.div
+            className={styles.scoreModal}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className={styles.scoreCard}>
+              <h2 className={styles.scoreTitle}>EDIT SCORES</h2>
+              {state.teams.map((t) => (
+                <div key={t.id} className={styles.scoreRow}>
+                  <span style={{ color: TEAM_COLORS[t.id] }}>{t.name}</span>
+                  <input
+                    type="number"
+                    value={draftScores[t.id] ?? ""}
+                    onChange={(e) =>
+                      setDraftScores({ ...draftScores, [t.id]: e.target.value })
+                    }
+                  />
+                </div>
+              ))}
+              <div className={styles.scoreActions}>
+                <button onClick={() => setScoreOpen(false)}>CANCEL</button>
+                <button className="success" onClick={saveScores}>SAVE</button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ACTIVE MODIFIER BANNER */}
       {activeMod && (state.phase === "question" || state.phase === "buzzed") && (
@@ -105,6 +202,63 @@ export default function MainBoard() {
             <p className={styles.subtitle}>WAITING FOR TEAMS — {state.teams.length}/4 CONNECTED</p>
             <button className="primary" onClick={() => send({ type: "start" })}>START GAME</button>
           </div>
+        )}
+
+        {/* === ENDED / WINNER === */}
+        {state.phase === "ended" && (
+          <motion.div
+            className={styles.podiumWrap}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4 }}
+          >
+            <Confetti />
+            <h1 className={styles.podiumTitle}>GAME OVER</h1>
+            <div className={styles.podium}>
+              {[1, 0, 2].map((rank) => {
+                const t = podium[rank];
+                if (!t) return <div key={rank} className={styles.podiumPlace} />;
+                const heights = ["220px", "300px", "160px"];
+                const labels = ["2nd", "1st", "3rd"];
+                const medals = ["🥈", "🥇", "🥉"];
+                return (
+                  <motion.div
+                    key={t.id}
+                    className={styles.podiumPlace}
+                    initial={{ y: 200, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.3 + rank * 0.2, type: "spring", stiffness: 180 }}
+                  >
+                    <div className={styles.podiumMedal}>{medals[rank]}</div>
+                    <div className={styles.podiumName} style={{ color: TEAM_COLORS[t.id] }}>
+                      {t.name}
+                    </div>
+                    <div className={styles.podiumScore}>{t.score}</div>
+                    <div
+                      className={styles.podiumBlock}
+                      style={{ height: heights[rank], background: TEAM_COLORS[t.id] }}
+                    >
+                      <div className={styles.podiumLabel}>{labels[rank]}</div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+            <button onClick={() => send({ type: "reset" })}>NEW GAME</button>
+          </motion.div>
+        )}
+
+        {state.phase === "countdown" && (
+          <motion.div
+            key={Math.ceil(state.timerMs / 1000)}
+            className={styles.countdown}
+            initial={{ scale: 0.3, opacity: 0 }}
+            animate={{ scale: 1.6, opacity: 1 }}
+            exit={{ scale: 2, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 240, damping: 18 }}
+          >
+            {Math.max(1, Math.ceil(state.timerMs / 1000))}
+          </motion.div>
         )}
 
         {state.phase === "tradeChoice" && (
@@ -244,16 +398,41 @@ export default function MainBoard() {
         )}
       </div>
 
-      {/* footer controls */}
+      {/* footer counter */}
       <div className={styles.footer}>
-        <button className="warn" onClick={() => send({ type: "reset" })}>
-          RESET
-        </button>
         <div className={styles.qCounter}>Q {state.questionsAnswered + 1}</div>
       </div>
 
       {/* Full-screen red nuclear flash overlay when timer ≤ 5s */}
       {danger && !hideTimer && <div className={styles.nukeFlash} />}
+    </div>
+  );
+}
+
+// Simple CSS confetti
+function Confetti() {
+  const pieces = Array.from({ length: 60 });
+  return (
+    <div className={styles.confettiWrap}>
+      {pieces.map((_, i) => {
+        const left = Math.random() * 100;
+        const delay = Math.random() * 2;
+        const dur = 3 + Math.random() * 3;
+        const colors = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f", "#7ba84c", "#e8a838"];
+        const bg = colors[i % colors.length];
+        return (
+          <span
+            key={i}
+            className={styles.confettiPiece}
+            style={{
+              left: `${left}%`,
+              background: bg,
+              animationDelay: `${delay}s`,
+              animationDuration: `${dur}s`,
+            }}
+          />
+        );
+      })}
     </div>
   );
 }

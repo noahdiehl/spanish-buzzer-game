@@ -133,6 +133,37 @@
   text-shadow: 3px 3px 0 var(--ink);
 }
 
+.countdownNum {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10rem;
+  color: var(--amber);
+  text-shadow: 6px 6px 0 var(--ink), 0 0 50px var(--amber-glow);
+  line-height: 1;
+}
+
+.endedScores {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+}
+.endedRow {
+  display: grid;
+  grid-template-columns: 50px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 3px solid currentColor;
+  border-radius: 12px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.9rem;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 0 0 var(--ink);
+}
+.endedRank { font-size: 1rem; }
+
 .revealHeadline {
   font-family: 'Press Start 2P', monospace;
   font-size: 2.4rem;

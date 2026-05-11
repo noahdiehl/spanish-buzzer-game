@@ -6,7 +6,9 @@ export type Phase =
   | "reveal"
   | "wheel"
   | "ready"
-  | "tradeChoice";
+  | "tradeChoice"
+  | "countdown"
+  | "ended";
 
 export type ModifierKey =
   | "doble"
@@ -76,8 +78,12 @@ export type ClientMsg =
   | { type: "spinWheel" }
   | { type: "wheelDone" }
   | { type: "tradeChoice"; targetTeamId: number }
+  | { type: "endGame" }
+  | { type: "setScore"; teamId: number; score: number }
+  | { type: "resume"; token: string }
   | { type: "reset" };
 
 export type ServerMsg =
   | { type: "state"; state: GameState; youAreTeamId: number | null }
+  | { type: "token"; token: string }
   | { type: "error"; message: string };

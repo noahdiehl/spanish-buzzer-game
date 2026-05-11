@@ -76,6 +76,40 @@ export default function PlayPage() {
           </div>
         )}
 
+        {state.phase === "countdown" && (
+          <motion.div
+            key={Math.ceil(state.timerMs / 1000)}
+            className={styles.center}
+            initial={{ scale: 0.3, opacity: 0 }}
+            animate={{ scale: 1.4, opacity: 1 }}
+            exit={{ scale: 1.8, opacity: 0 }}
+            transition={{ type: "spring", stiffness: 240, damping: 16 }}
+          >
+            <div className={styles.countdownNum}>
+              {Math.max(1, Math.ceil(state.timerMs / 1000))}
+            </div>
+          </motion.div>
+        )}
+
+        {state.phase === "ended" && (
+          <div className={styles.center}>
+            <div className={styles.subtitle}>GAME OVER</div>
+            <div className={styles.endedScores}>
+              {[...state.teams].sort((a, b) => b.score - a.score).map((t, idx) => (
+                <div
+                  key={t.id}
+                  className={styles.endedRow}
+                  style={{ color: TEAM_COLORS[t.id] }}
+                >
+                  <span className={styles.endedRank}>#{idx + 1}</span>
+                  <span>{t.name}</span>
+                  <span>{t.score}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {state.phase === "question" && (() => {
           const isLocked = state.lockedTeamId === youAreTeamId && state.lockedMs > 0;
           const alreadyWrong = state.answeredWrong.includes(youAreTeamId!);
