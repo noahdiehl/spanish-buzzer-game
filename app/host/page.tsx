@@ -6,6 +6,7 @@ import styles from "./board.module.css";
 import { MODIFIERS } from "@/lib/types";
 import { Wheel } from "./Wheel";
 import { Flappy } from "../Flappy";
+import { Banana } from "../Banana";
 
 // warm muted team palette: coral, teal, mustard, plum
 const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
@@ -20,6 +21,8 @@ export default function MainBoard() {
   const buzzAudioRef = useRef<HTMLAudioElement | null>(null);
   const lastBuzzedRef = useRef<number | null>(null);
   const flappyMusicRef = useRef<HTMLAudioElement | null>(null);
+  const bananaMusicRef = useRef<HTMLAudioElement | null>(null);
+  const blipCtxRef = useRef<AudioContext | null>(null);
 
   // Auto-advance the reveal screen after 1.5s so the host doesn't have to click NEXT every round.
   useEffect(() => {
@@ -44,13 +47,13 @@ export default function MainBoard() {
     }
   }, [state?.phase, state?.buzzedTeamId]);
 
-  // Flappy bird music — plays during the entire minigame phase (intro + playing + over).
+  // Banana music — plays during the banana event.
   useEffect(() => {
-    const audio = flappyMusicRef.current;
+    const audio = bananaMusicRef.current;
     if (!audio) return;
-    if (state?.phase === "minigame") {
-      audio.volume = 0.6;
-      audio.loop = true;
+    audio.loop = true;
+    if (state?.phase === "minigame" && state.minigame?.kind === "banana") {
+      audio.volume = 0.55;
       if (audio.paused) {
         audio.currentTime = 0;
         audio.play().catch(() => {});
@@ -58,6 +61,58 @@ export default function MainBoard() {
     } else {
       if (!audio.paused) audio.pause();
       audio.currentTime = 0;
+    }
+  }, [state?.phase, state?.minigame?.kind]);
+
+  // VG dialog blip — short square-wave click via WebAudio.
+  function playBlip() {
+    try {
+      if (!blipCtxRef.current) {
+        blipCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      const ctx = blipCtxRef.current;
+      if (!ctx) return;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = "square";
+      o.frequency.value = 720;
+      g.gain.value = 0.07;
+      o.connect(g);
+      g.connect(ctx.destination);
+      const now = ctx.currentTime;
+      g.gain.setValueAtTime(0.07, now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+      o.start(now);
+      o.stop(now + 0.05);
+    } catch {}
+  }
+
+  // Flappy bird music — plays during the entire minigame phase (intro + playing + over).
+  // Skip the first 5 seconds and re-seek to 5 each loop.
+  useEffect(() => {
+    const audio = flappyMusicRef.current;
+    if (!audio) return;
+    audio.loop = false;
+    const onEnded = () => {
+      audio.currentTime = 5;
+      audio.play().catch(() => {});
+    };
+    audio.addEventListener("ended", onEnded);
+    return () => audio.removeEventListener("ended", onEnded);
+  }, []);
+
+  useEffect(() => {
+    const audio = flappyMusicRef.current;
+    if (!audio) return;
+    if (state?.phase === "minigame") {
+      audio.volume = 0.6;
+      if (audio.paused) {
+        audio.currentTime = 5;
+        audio.play().catch(() => {});
+      }
+    } else {
+      if (!audio.paused) audio.pause();
+      audio.currentTime = 5;
     }
   }, [state?.phase]);
 
@@ -379,12 +434,70 @@ export default function MainBoard() {
           </motion.div>
         )}
 
-        {state.phase === "minigame" && state.minigame && (
+        {state.phase === "minigame" && state.minigame?.kind === "flappy" && (
           <div className={styles.minigameWrap}>
-            <h2 className={styles.minigameTitle}>MINI GAME — FLAPPY MARCO</h2>
+            <h2 className={styles.minigameTitle}>FLAPPY MARCO — FOR 100,000 POINTS</h2>
             <Flappy mg={state.minigame} teams={state.teams} height={520} width={820} />
           </div>
         )}
+
+        {state.phase === "minigame" && state.minigame?.kind === "draw" && (() => {
+          const mg = state.minigame!;
+          return (
+            <div className={styles.minigameWrap}>
+              <h2 className={styles.minigameTitle}>DRAW MARCO FROM MEMORY</h2>
+
+              {mg.status === "study" && (
+                <div className={styles.drawStudy}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/marco/study.png" alt="" className={styles.drawStudyImg} />
+                  <div className={styles.drawCountdown}>{Math.max(1, Math.ceil(mg.countdownMs / 1000))}</div>
+                  <div className={styles.subtitle}>STUDY HIM...</div>
+                </div>
+              )}
+
+              {mg.status === "drawing" && (
+                <div className={styles.drawStudy}>
+                  <div className={styles.drawBigCountdown}>{Math.max(0, Math.ceil(mg.countdownMs / 1000))}</div>
+                  <div className={styles.subtitle}>DRAW HIM FROM MEMORY</div>
+                </div>
+              )}
+
+              {mg.status === "judging" && (
+                <div className={styles.drawJudgeWrap}>
+                  <div className={styles.drawReferenceRow}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src="/marco/study.png" alt="" className={styles.drawReference} />
+                    <div className={styles.drawReferenceLabel}>THE REAL MARCO</div>
+                  </div>
+                  <div className={styles.drawGrid}>
+                    {state.teams.map((t) => {
+                      const color = TEAM_COLORS[t.id];
+                      const url = mg.drawings[t.id];
+                      return (
+                        <div key={t.id} className={styles.drawCard} style={{ borderColor: color }}>
+                          {url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={url} alt="" className={styles.drawImg} />
+                          ) : (
+                            <div className={styles.drawEmpty}>NO ENTRY</div>
+                          )}
+                          <div className={styles.drawName} style={{ color }}>{t.name}</div>
+                          <button
+                            className="success"
+                            onClick={() => send({ type: "judgeDraw", winnerTeamId: t.id })}
+                          >
+                            WINNER
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {state.phase === "countdown" && (
           <motion.div
@@ -555,6 +668,13 @@ export default function MainBoard() {
       <audio ref={buzzAudioRef} src="/sounds/buzz.mp3" preload="auto" />
       {/* Flappy minigame background music */}
       <audio ref={flappyMusicRef} src="/sounds/nostalgic.mp3" preload="auto" />
+      {/* Banana event music */}
+      <audio ref={bananaMusicRef} src="/sounds/banana.mp3" preload="auto" />
+
+      {/* Banana event overlay */}
+      {state.phase === "minigame" && state.minigame?.kind === "banana" && (
+        <Banana mg={state.minigame} teams={state.teams} size="host" onTypeBlip={playBlip} />
+      )}
     </div>
   );
 }

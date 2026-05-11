@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useGame } from "@/lib/useGame";
 import { Flappy } from "./Flappy";
+import { DrawCanvas } from "./DrawCanvas";
+import { Banana } from "./Banana";
 import styles from "./play.module.css";
 
 const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
@@ -10,6 +12,20 @@ const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
 export default function PlayPage() {
   const { state, youAreTeamId, send, connected, error } = useGame("player");
   const [name, setName] = useState("");
+  const [drawSubmitTrigger, setDrawSubmitTrigger] = useState(0);
+
+  // Auto-submit drawing when the draw phase ends (status transitions to judging).
+  useEffect(() => {
+    if (
+      state?.phase === "minigame" &&
+      state.minigame?.kind === "draw" &&
+      state.minigame.status === "judging" &&
+      youAreTeamId !== null &&
+      !state.minigame.drawings[youAreTeamId]
+    ) {
+      setDrawSubmitTrigger((n) => n + 1);
+    }
+  }, [state?.phase, state?.minigame?.kind, state?.minigame?.status, state?.minigame?.drawings, youAreTeamId]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -54,7 +70,7 @@ export default function PlayPage() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="TEAM NAME"
-              maxLength={24}
+              maxLength={12}
             />
             <button type="submit" className="primary" disabled={!name.trim() || state.teams.length >= 4}>
               CONNECT
@@ -85,7 +101,11 @@ export default function PlayPage() {
           </div>
         )}
 
-        {state.phase === "minigame" && state.minigame && (
+        {state.phase === "minigame" && state.minigame?.kind === "banana" && (
+          <Banana mg={state.minigame} teams={state.teams} size="player" />
+        )}
+
+        {state.phase === "minigame" && state.minigame?.kind === "flappy" && (
           <div className={styles.center}>
             <div className={styles.subtitle}>FLAPPY MARCO</div>
             <Flappy
@@ -113,6 +133,48 @@ export default function PlayPage() {
             })()}
           </div>
         )}
+
+        {state.phase === "minigame" && state.minigame?.kind === "draw" && (() => {
+          const mg = state.minigame!;
+          const canvasSize = Math.min(360, typeof window !== "undefined" ? window.innerWidth - 60 : 360);
+          return (
+            <div className={styles.center}>
+              <div className={styles.subtitle}>DRAW MARCO</div>
+              {mg.status === "study" && (
+                <>
+                  <div className={styles.hint}>STUDY HIM... {Math.ceil(mg.countdownMs / 1000)}</div>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/marco/study.png"
+                    alt=""
+                    style={{
+                      width: canvasSize,
+                      height: canvasSize,
+                      objectFit: "contain",
+                      border: "3px solid var(--ink)",
+                      borderRadius: 14,
+                      background: "#fbf6e4",
+                      boxShadow: "0 5px 0 0 var(--ink)",
+                    }}
+                  />
+                </>
+              )}
+              {mg.status === "drawing" && (
+                <>
+                  <div className={styles.hint}>{Math.ceil(mg.countdownMs / 1000)}s — DRAW HIM FROM MEMORY</div>
+                  <DrawCanvas
+                    size={canvasSize}
+                    onSubmit={(dataUrl) => send({ type: "submitDrawing", dataUrl })}
+                    submitTrigger={drawSubmitTrigger}
+                  />
+                </>
+              )}
+              {mg.status === "judging" && (
+                <div className={styles.hint}>PENCILS DOWN — host is picking the winner...</div>
+              )}
+            </div>
+          );
+        })()}
 
         {state.phase === "countdown" && (
           <motion.div

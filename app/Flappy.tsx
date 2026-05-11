@@ -192,49 +192,100 @@ export function Flappy({ mg, teams, highlightTeamId, height, width }: Props) {
       )}
 
       {/* Game over overlay */}
-      {mg.status === "over" && (
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            background: "rgba(244,232,207,0.85)",
-            gap: 12,
-          }}
-        >
+      {mg.status === "over" && (() => {
+        const ranked = [...mg.birds].sort((a, b) => b.scoreMs - a.scoreMs);
+        const winner = ranked[0];
+        const winnerTeam = winner ? teams.find((t) => t.id === winner.teamId) : null;
+        const winnerColor = winner ? TEAM_COLORS[winner.teamId] : "#000";
+        const awards = [10000, 5000, 2000, 0];
+        return (
           <div
             style={{
-              fontFamily: "Press Start 2P, monospace",
-              fontSize: Math.min(width, height) * 0.08,
-              color: "var(--ink)",
-              textShadow: "4px 4px 0 var(--amber)",
+              position: "absolute",
+              inset: 0,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              background: "rgba(244,232,207,0.92)",
+              gap: 12,
+              padding: 16,
             }}
           >
-            GAME OVER
-          </div>
-          {[...mg.birds].sort((a, b) => b.scoreMs - a.scoreMs).map((b, i) => {
-            const team = teams.find((t) => t.id === b.teamId);
-            if (!team) return null;
-            const awards = [1000, 500, 200, 0];
-            return (
-              <div
-                key={b.teamId}
-                style={{
-                  fontFamily: "VT323, monospace",
-                  fontSize: Math.min(width, height) * 0.045,
-                  color: TEAM_COLORS[b.teamId],
-                  letterSpacing: 2,
-                }}
-              >
-                #{i + 1} {team.name} — +{awards[i] ?? 0}
+            {winnerTeam ? (
+              <>
+                <motion.div
+                  initial={{ scale: 0, rotate: -10, opacity: 0 }}
+                  animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 200, damping: 12, delay: 0.1 }}
+                  style={{
+                    fontFamily: "Press Start 2P, monospace",
+                    fontSize: Math.min(width, height) * 0.075,
+                    color: "var(--ink)",
+                    textShadow: "4px 4px 0 var(--amber)",
+                    letterSpacing: 4,
+                  }}
+                >
+                  WINNER
+                </motion.div>
+                <motion.div
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 240, damping: 14, delay: 0.4 }}
+                  style={{
+                    fontFamily: "Press Start 2P, monospace",
+                    fontSize: Math.min(width, height) * 0.13,
+                    color: winnerColor,
+                    textShadow: "6px 6px 0 var(--ink)",
+                    letterSpacing: 4,
+                    textAlign: "center",
+                    lineHeight: 1.1,
+                  }}
+                >
+                  {winnerTeam.name}
+                </motion.div>
+                <motion.div
+                  initial={{ y: 30, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ duration: 0.4, delay: 0.9 }}
+                  style={{
+                    fontFamily: "Press Start 2P, monospace",
+                    fontSize: Math.min(width, height) * 0.09,
+                    color: "var(--avocado)",
+                    textShadow: "5px 5px 0 var(--ink)",
+                    letterSpacing: 3,
+                  }}
+                >
+                  100,000 POINTS!
+                </motion.div>
+              </>
+            ) : (
+              <div style={{ fontFamily: "Press Start 2P, monospace", fontSize: Math.min(width, height) * 0.07 }}>
+                NO SURVIVORS
               </div>
-            );
-          })}
-        </div>
-      )}
+            )}
+            <div style={{ display: "flex", gap: 14, marginTop: 18, flexWrap: "wrap", justifyContent: "center" }}>
+              {ranked.slice(1).map((b, i) => {
+                const team = teams.find((t) => t.id === b.teamId);
+                if (!team) return null;
+                return (
+                  <div
+                    key={b.teamId}
+                    style={{
+                      fontFamily: "VT323, monospace",
+                      fontSize: Math.min(width, height) * 0.04,
+                      color: TEAM_COLORS[b.teamId],
+                      letterSpacing: 2,
+                    }}
+                  >
+                    #{i + 2} {team.name} +{awards[i + 1] ?? 0}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

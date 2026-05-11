@@ -45,6 +45,17 @@ export interface Team {
   connected: boolean;
 }
 
+export type MinigameKind = "flappy" | "draw" | "banana";
+
+export type BananaStatus =
+  | "enter"      // banana man slides up
+  | "dialog1"    // "Time to remove points..."
+  | "dialog2"    // "I think I'll remove 50,000,000,000 points."
+  | "roulette"   // cycling team highlight
+  | "reveal"     // landed on victim, points deducted
+  | "laugh"      // "Team X. Haw haw haw!"
+  | "exit";      // banana man slides out
+
 export interface FlappyBird {
   teamId: number;
   y: number;       // 0 = top, 1 = bottom
@@ -60,11 +71,18 @@ export interface FlappyPipe {
 }
 
 export interface MinigameState {
-  status: "intro" | "playing" | "over";
-  countdownMs: number; // for intro
-  elapsedMs: number;   // since playing started
+  kind: MinigameKind;
+  status: "intro" | "playing" | "over" | "study" | "drawing" | "judging" | BananaStatus;
+  countdownMs: number; // for intro / study / drawing / banana phase timers
+  elapsedMs: number;   // since playing started (flappy)
+  // Flappy-specific
   birds: FlappyBird[];
   pipes: FlappyPipe[];
+  // Draw-specific: teamId -> data URL of submitted drawing
+  drawings: Record<number, string>;
+  // Banana-specific
+  bananaVictimId: number | null;
+  bananaDeduction: number;
 }
 
 export interface GameState {
@@ -90,8 +108,10 @@ export interface GameState {
   lockedMs: number;
   // Team that won the most recent question — gets to spin the next wheel
   lastWinnerTeamId: number | null;
-  // Active minigame state (flappy bird) — null when not in minigame phase
+  // Active minigame state — null when not in minigame phase
   minigame: MinigameState | null;
+  // Counter incremented every minigame; used to cycle between flappy / draw / etc.
+  minigameCount: number;
 }
 
 export type ClientMsg =
@@ -106,6 +126,8 @@ export type ClientMsg =
   | { type: "endGame" }
   | { type: "setScore"; teamId: number; score: number }
   | { type: "flap" }
+  | { type: "submitDrawing"; dataUrl: string }
+  | { type: "judgeDraw"; winnerTeamId: number }
   | { type: "resume"; token: string }
   | { type: "reset" };
 

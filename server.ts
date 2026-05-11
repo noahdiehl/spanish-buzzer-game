@@ -29,10 +29,27 @@ const FLAPPY_GRAVITY = 1.6;       // per second
 const FLAPPY_JUMP_VY = -0.6;
 const FLAPPY_PIPE_SPEED = 0.22;   // per second
 const FLAPPY_PIPE_GAP = 0.32;
-const FLAPPY_PIPE_INTERVAL_MS = 1500;
+const FLAPPY_PIPE_INTERVAL_MS = 1100;
+const FLAPPY_FIRST_PIPE_DELAY_MS = 900;
 const FLAPPY_BIRD_X = 0.3;
 const FLAPPY_BIRD_RADIUS = 0.04;
 const FLAPPY_PIPE_WIDTH = 0.09;
+
+const DRAW_STUDY_MS = 5000;
+const DRAW_DRAWING_MS = 20000;
+const DRAW_WINNER_POINTS = 10000;
+
+const MINIGAME_CYCLE: ("flappy" | "draw" | "banana")[] = ["flappy", "draw", "banana"];
+
+// Banana event timings
+const BANANA_ENTER_MS = 900;
+const BANANA_DIALOG1_MS = 2400;
+const BANANA_DIALOG2_MS = 2800;
+const BANANA_ROULETTE_MS = 3500;
+const BANANA_REVEAL_MS = 1300;
+const BANANA_LAUGH_MS = 2400;
+const BANANA_EXIT_MS = 900;
+const BANANA_DEDUCTION = 50_000_000;
 
 interface ClientInfo {
   ws: WebSocket;
@@ -61,6 +78,7 @@ function freshState(): GameState {
     lockedMs: 0,
     lastWinnerTeamId: null,
     minigame: null,
+    minigameCount: 0,
   };
 }
 
@@ -154,7 +172,17 @@ function startMinigame() {
   state.lockedTeamId = null;
   state.lockedMs = 0;
 
+  const kind = MINIGAME_CYCLE[state.minigameCount % MINIGAME_CYCLE.length];
+  state.minigameCount += 1;
+
+  if (kind === "flappy") startFlappy();
+  else if (kind === "draw") startDraw();
+  else startBanana();
+}
+
+function startFlappy() {
   const mg: MinigameState = {
+    kind: "flappy",
     status: "intro",
     countdownMs: FLAPPY_INTRO_MS,
     elapsedMs: 0,
@@ -166,15 +194,131 @@ function startMinigame() {
       scoreMs: 0,
     })),
     pipes: [],
+    drawings: {},
+    bananaVictimId: null,
+    bananaDeduction: 0,
   };
   state.minigame = mg;
-  flappyPipeTimer = 0;
+  flappyPipeTimer = FLAPPY_PIPE_INTERVAL_MS - FLAPPY_FIRST_PIPE_DELAY_MS;
   pipeIdCounter = 0;
 
   tickInterval = setInterval(() => {
     minigameTick();
     broadcast();
   }, FLAPPY_TICK_MS);
+}
+
+function startDraw() {
+  const mg: MinigameState = {
+    kind: "draw",
+    status: "study",
+    countdownMs: DRAW_STUDY_MS,
+    elapsedMs: 0,
+    birds: [],
+    pipes: [],
+    drawings: {},
+    bananaVictimId: null,
+    bananaDeduction: 0,
+  };
+  state.minigame = mg;
+
+  tickInterval = setInterval(() => {
+    drawTick();
+    broadcast();
+  }, FLAPPY_TICK_MS);
+}
+
+function startBanana() {
+  // Pick a victim upfront — the roulette animates and lands on this team.
+  const victim = state.teams.length > 0
+    ? state.teams[Math.floor(Math.random() * state.teams.length)]
+    : null;
+  const mg: MinigameState = {
+    kind: "banana",
+    status: "enter",
+    countdownMs: BANANA_ENTER_MS,
+    elapsedMs: 0,
+    birds: [],
+    pipes: [],
+    drawings: {},
+    bananaVictimId: victim?.id ?? null,
+    bananaDeduction: BANANA_DEDUCTION,
+  };
+  state.minigame = mg;
+
+  tickInterval = setInterval(() => {
+    bananaTick();
+    broadcast();
+  }, FLAPPY_TICK_MS);
+}
+
+function bananaTick() {
+  const mg = state.minigame;
+  if (!mg || mg.kind !== "banana") return;
+  mg.countdownMs -= FLAPPY_TICK_MS;
+  if (mg.countdownMs > 0) return;
+
+  // Phase transition
+  switch (mg.status) {
+    case "enter":
+      mg.status = "dialog1";
+      mg.countdownMs = BANANA_DIALOG1_MS;
+      break;
+    case "dialog1":
+      mg.status = "dialog2";
+      mg.countdownMs = BANANA_DIALOG2_MS;
+      break;
+    case "dialog2":
+      mg.status = "roulette";
+      mg.countdownMs = BANANA_ROULETTE_MS;
+      break;
+    case "roulette":
+      // Apply deduction server-side
+      if (mg.bananaVictimId !== null) {
+        const victim = state.teams.find((t) => t.id === mg.bananaVictimId);
+        if (victim) victim.score = Math.max(0, victim.score - mg.bananaDeduction);
+      }
+      mg.status = "reveal";
+      mg.countdownMs = BANANA_REVEAL_MS;
+      break;
+    case "reveal":
+      mg.status = "laugh";
+      mg.countdownMs = BANANA_LAUGH_MS;
+      break;
+    case "laugh":
+      mg.status = "exit";
+      mg.countdownMs = BANANA_EXIT_MS;
+      break;
+    case "exit":
+      // Done — advance
+      stopTimer();
+      state.minigame = null;
+      state.questionIdx = (state.questionIdx + 1) % QUESTIONS.length;
+      startQuestion();
+      break;
+  }
+}
+
+function drawTick() {
+  const mg = state.minigame;
+  if (!mg || mg.kind !== "draw") return;
+  if (mg.status === "study") {
+    mg.countdownMs -= FLAPPY_TICK_MS;
+    if (mg.countdownMs <= 0) {
+      mg.status = "drawing";
+      mg.countdownMs = DRAW_DRAWING_MS;
+    }
+    return;
+  }
+  if (mg.status === "drawing") {
+    mg.countdownMs -= FLAPPY_TICK_MS;
+    if (mg.countdownMs <= 0) {
+      mg.status = "judging";
+      mg.countdownMs = 0;
+      stopTimer(); // host now picks winner manually
+    }
+    return;
+  }
 }
 
 function minigameTick() {
@@ -263,7 +407,7 @@ function endMinigame() {
   stopTimer();
   // Award points by survival time rank
   const ranked = [...mg.birds].sort((a, b) => b.scoreMs - a.scoreMs);
-  const awards = [1000, 500, 200, 0];
+  const awards = [10000, 5000, 2000, 0];
   ranked.forEach((b, i) => {
     const team = state.teams.find((t) => t.id === b.teamId);
     if (team) team.score += awards[i] ?? 0;
@@ -345,7 +489,7 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
     case "join": {
       if (client.teamId !== null) {
         const t = state.teams.find((x) => x.id === client.teamId);
-        if (t) t.name = msg.name.slice(0, 24) || t.name;
+        if (t) t.name = msg.name.slice(0, 12) || t.name;
         broadcast();
         return;
       }
@@ -357,7 +501,7 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       const id = state.teams.length;
       const team: Team = {
         id,
-        name: msg.name.slice(0, 24) || `Team ${id + 1}`,
+        name: msg.name.slice(0, 12) || `Team ${id + 1}`,
         score: 0,
         connected: true,
       };
@@ -393,7 +537,30 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       if (client.teamId === null) return;
       const bird = state.minigame.birds.find((b) => b.teamId === client.teamId);
       if (bird && bird.alive) bird.vy = FLAPPY_JUMP_VY;
-      // No broadcast here — next tick will broadcast naturally
+      return;
+    }
+    case "submitDrawing": {
+      if (state.phase !== "minigame" || !state.minigame) return;
+      if (state.minigame.kind !== "draw") return;
+      if (client.teamId === null) return;
+      // Cap size to avoid abuse (rough check, ~500KB)
+      if (typeof msg.dataUrl !== "string" || msg.dataUrl.length > 500_000) return;
+      state.minigame.drawings[client.teamId] = msg.dataUrl;
+      broadcast();
+      return;
+    }
+    case "judgeDraw": {
+      if (state.phase !== "minigame" || !state.minigame) return;
+      if (state.minigame.kind !== "draw" || state.minigame.status !== "judging") return;
+      const winner = state.teams.find((t) => t.id === msg.winnerTeamId);
+      if (!winner) return;
+      winner.score += DRAW_WINNER_POINTS;
+      state.lastWinnerTeamId = winner.id;
+      // Auto-advance to next question
+      state.minigame = null;
+      state.questionIdx = (state.questionIdx + 1) % QUESTIONS.length;
+      startQuestion();
+      broadcast();
       return;
     }
     case "endGame": {
