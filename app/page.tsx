@@ -31,7 +31,7 @@ export default function PlayPage() {
     return (
       <div className={styles.shell}>
         <div className={styles.center}>
-          <h1 className={styles.title}>:: TEAM NAME ::</h1>
+          <h1 className={styles.title}>TEAM NAME</h1>
           <p className={styles.subtitle}>{state.teams.length}/4 SLOTS FILLED</p>
           <form
             onSubmit={(e) => {

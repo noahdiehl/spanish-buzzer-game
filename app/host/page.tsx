@@ -101,7 +101,7 @@ export default function MainBoard() {
       <div className={styles.center}>
         {state.phase === "lobby" && (
           <div className={styles.lobby}>
-            <h1 className={styles.title}>:: SPANISH BUZZER ::</h1>
+            <h1 className={styles.title}>SPANISH BUZZER</h1>
             <p className={styles.subtitle}>WAITING FOR TEAMS — {state.teams.length}/4 CONNECTED</p>
             <button className="primary" onClick={() => send({ type: "start" })}>START GAME</button>
           </div>
