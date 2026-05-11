@@ -30,11 +30,12 @@ export default function MainBoard() {
   const danger = state.phase === "question" && state.timerMs <= 5000;
   const hideTimer = state.modifier === "mudo";
   const activeMod = state.modifier ? MODIFIERS.find((m) => m.key === state.modifier) : null;
-  // Hide top scores during countdown + question + buzzed (slide them out).
+  // Hide top scores during countdown + question + buzzed + ended (slide them out).
   const scoresHidden =
     state.phase === "countdown" ||
     state.phase === "question" ||
-    state.phase === "buzzed";
+    state.phase === "buzzed" ||
+    state.phase === "ended";
 
   function openEditScores() {
     if (!state) return;
@@ -137,9 +138,10 @@ export default function MainBoard() {
           {menuOpen && (
             <motion.div
               className={styles.menuPanel}
-              initial={{ opacity: 0, y: -8, scale: 0.95 }}
+              initial={{ opacity: 0, y: 12, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.95 }}
+              exit={{ opacity: 0, y: 12, scale: 0.95 }}
+              transition={{ duration: 0.18 }}
             >
               <button onClick={() => { send({ type: "reset" }); setMenuOpen(false); }}>RESET GAME</button>
               <button onClick={() => { send({ type: "endGame" }); setMenuOpen(false); }}>END GAME</button>
@@ -213,38 +215,106 @@ export default function MainBoard() {
             transition={{ duration: 0.4 }}
           >
             <Confetti />
-            <h1 className={styles.podiumTitle}>GAME OVER</h1>
+            <motion.h1
+              className={styles.podiumTitle}
+              initial={{ y: -40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.5 }}
+            >
+              GAME OVER
+            </motion.h1>
+            {/* Visual order: 2nd | 1st | 3rd (centered on first place)
+                Reveal order: 3rd at 0.6s, 2nd at 1.6s, 1st at 2.6s */}
             <div className={styles.podium}>
               {[1, 0, 2].map((rank) => {
                 const t = podium[rank];
-                if (!t) return <div key={rank} className={styles.podiumPlace} />;
-                const heights = ["220px", "300px", "160px"];
+                const heights = ["260px", "360px", "180px"];
                 const labels = ["2nd", "1st", "3rd"];
                 const medals = ["🥈", "🥇", "🥉"];
+                // Reveal in reverse order of place: 3rd first, then 2nd, then 1st
+                const delay = rank === 2 ? 0.6 : rank === 1 ? 1.6 : 2.6;
+                const isFirst = rank === 0;
+                if (!t) {
+                  return <div key={`empty-${rank}`} className={styles.podiumPlace} style={{ visibility: "hidden" }} />;
+                }
                 return (
                   <motion.div
                     key={t.id}
-                    className={styles.podiumPlace}
-                    initial={{ y: 200, opacity: 0 }}
+                    className={`${styles.podiumPlace} ${isFirst ? styles.podiumFirst : ""}`}
+                    initial={{ y: 400, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
-                    transition={{ delay: 0.3 + rank * 0.2, type: "spring", stiffness: 180 }}
+                    transition={{
+                      delay,
+                      type: "spring",
+                      stiffness: 220,
+                      damping: 12,
+                      mass: 0.9,
+                    }}
                   >
-                    <div className={styles.podiumMedal}>{medals[rank]}</div>
-                    <div className={styles.podiumName} style={{ color: TEAM_COLORS[t.id] }}>
+                    {/* Spotlight only on 1st */}
+                    {isFirst && (
+                      <motion.div
+                        className={styles.spotlight}
+                        initial={{ opacity: 0, scale: 0.5 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: delay + 0.3, duration: 0.6 }}
+                      />
+                    )}
+                    <motion.div
+                      className={styles.podiumMedal}
+                      initial={{ scale: 0, rotate: -180 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{
+                        delay: delay + 0.5,
+                        type: "spring",
+                        stiffness: 300,
+                        damping: 14,
+                      }}
+                    >
+                      {medals[rank]}
+                    </motion.div>
+                    <motion.div
+                      className={styles.podiumName}
+                      style={{ color: TEAM_COLORS[t.id] }}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: delay + 0.6, duration: 0.3 }}
+                    >
                       {t.name}
-                    </div>
-                    <div className={styles.podiumScore}>{t.score}</div>
-                    <div
+                    </motion.div>
+                    <motion.div
+                      className={styles.podiumScore}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: delay + 0.7, duration: 0.3 }}
+                    >
+                      {t.score}
+                    </motion.div>
+                    <motion.div
                       className={styles.podiumBlock}
-                      style={{ height: heights[rank], background: TEAM_COLORS[t.id] }}
+                      style={{ background: TEAM_COLORS[t.id] }}
+                      initial={{ height: 0 }}
+                      animate={{ height: heights[rank] }}
+                      transition={{
+                        delay: delay + 0.2,
+                        duration: 0.5,
+                        ease: [0.34, 1.56, 0.64, 1],
+                      }}
                     >
                       <div className={styles.podiumLabel}>{labels[rank]}</div>
-                    </div>
+                    </motion.div>
                   </motion.div>
                 );
               })}
             </div>
-            <button onClick={() => send({ type: "reset" })}>NEW GAME</button>
+            <motion.button
+              onClick={() => send({ type: "reset" })}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 4.0, duration: 0.4 }}
+            >
+              NEW GAME
+            </motion.button>
           </motion.div>
         )}
 
