@@ -63,6 +63,8 @@ export interface GameState {
   // DELAY modifier: one random team's buzzer is locked for X ms at the start
   lockedTeamId: number | null;
   lockedMs: number;
+  // Team that won the most recent question — gets to spin the next wheel
+  lastWinnerTeamId: number | null;
 }
 
 export type ClientMsg =

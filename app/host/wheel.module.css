@@ -18,8 +18,8 @@
 
 .wheelStage {
   position: relative;
-  width: min(68vh, 80vw);
-  height: min(68vh, 80vw);
+  width: min(56vh, 70vw);
+  height: min(56vh, 70vw);
   aspect-ratio: 1;
 }
 
@@ -27,6 +27,27 @@
   font-size: 1.8rem !important;
   padding: 22px 48px !important;
   letter-spacing: 6px !important;
+}
+
+.waitingFor {
+  font-family: 'VT323', monospace;
+  font-size: 1.8rem;
+  letter-spacing: 3px;
+  color: var(--ink-soft);
+  text-align: center;
+}
+.waitingName {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 1.2rem;
+  color: var(--amber);
+  letter-spacing: 2px;
+}
+.spinningText {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 1.4rem;
+  letter-spacing: 4px;
+  color: var(--amber);
+  text-shadow: 3px 3px 0 var(--ink);
 }
 
 .pointer {

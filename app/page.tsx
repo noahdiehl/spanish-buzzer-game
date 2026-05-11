@@ -154,11 +154,47 @@ export default function PlayPage() {
           </div>
         )}
 
-        {state.phase === "reveal" && (
-          <div className={styles.center}>
-            <div className={styles.subtitle}>NEXT QUESTION...</div>
-          </div>
-        )}
+        {state.phase === "reveal" && (() => {
+          const j = state.lastJudgment;
+          const iWon = j?.correct && j.teamId === youAreTeamId;
+          const winnerName = j ? state.teams.find((t) => t.id === j.teamId)?.name : null;
+          const headline = (() => {
+            if (!j?.correct) return "NOBODY GOT IT";
+            switch (j.modifier) {
+              case "doble":   return "DOUBLE POINTS!";
+              case "triple":  return "TRIPLE POINTS!";
+              case "jackpot": return "JACKPOT!";
+              case "trueque": return "TRADE COMPLETE!";
+              default:        return "CORRECT!";
+            }
+          })();
+          const headlineColor = j?.correct ? "var(--avocado)" : "var(--tomato)";
+          return (
+            <motion.div
+              className={styles.center}
+              initial={{ scale: 0.4, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: "spring", stiffness: 300, damping: 14 }}
+            >
+              <div className={styles.revealHeadline} style={{ color: headlineColor }}>
+                {headline}
+              </div>
+              {j?.correct && (
+                <>
+                  <div className={styles.revealWho}>
+                    {iWon ? "YOU WON!" : `${winnerName} WON`}
+                  </div>
+                  <div
+                    className={styles.revealPoints}
+                    style={{ color: (j.pointsDelta ?? 0) >= 0 ? "var(--avocado)" : "var(--tomato)" }}
+                  >
+                    {(j.pointsDelta ?? 0) >= 0 ? "+" : ""}{j.pointsDelta} pts
+                  </div>
+                </>
+              )}
+            </motion.div>
+          );
+        })()}
 
         {state.phase === "tradeChoice" && (
           <div className={styles.center}>
@@ -193,12 +229,46 @@ export default function PlayPage() {
           </div>
         )}
 
-        {state.phase === "wheel" && (
-          <div className={styles.center}>
-            <div className={styles.subtitle}>WHEEL OF MARCO...</div>
-            <div className={styles.hint}>(watch the screen)</div>
-          </div>
-        )}
+        {state.phase === "wheel" && (() => {
+          const canISpin =
+            state.lastWinnerTeamId === youAreTeamId &&
+            !state.wheelResult;
+          const winnerName = state.lastWinnerTeamId !== null
+            ? state.teams.find((t) => t.id === state.lastWinnerTeamId)?.name
+            : null;
+          return (
+            <div className={styles.center}>
+              <div className={styles.subtitle}>WHEEL OF MARCO</div>
+              {canISpin ? (
+                <>
+                  <div className={styles.hint}>YOU WON LAST — SPIN IT!</div>
+                  <motion.button
+                    className={`primary ${styles.bigSpinBtn}`}
+                    onClick={() => send({ type: "spinWheel" })}
+                    whileHover={{ scale: 1.06 }}
+                    whileTap={{ scale: 0.94 }}
+                    animate={{
+                      boxShadow: [
+                        "0 6px 0 0 var(--ink)",
+                        "0 12px 0 0 var(--ink)",
+                        "0 6px 0 0 var(--ink)",
+                      ],
+                    }}
+                    transition={{ duration: 1.2, repeat: Infinity }}
+                  >
+                    SPIN
+                  </motion.button>
+                </>
+              ) : state.wheelResult ? (
+                <div className={styles.hint}>(watch the screen)</div>
+              ) : winnerName ? (
+                <div className={styles.hint}>waiting for {winnerName} to spin...</div>
+              ) : (
+                <div className={styles.hint}>(watch the screen)</div>
+              )}
+            </div>
+          );
+        })()}
 
       </div>
     </div>

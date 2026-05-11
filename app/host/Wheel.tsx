@@ -8,12 +8,14 @@ interface Props {
   result: ModifierKey | null;        // null until server has picked
   onSpinRequest: () => void;          // ask server to pick
   onSpinComplete: () => void;         // tell server we're done landing
+  canSpinHere?: boolean;              // show local SPIN button (fallback when no winner)
+  waitingForName?: string | null;     // name of remote spinner, if any
 }
 
 const SEG_COUNT = MODIFIERS.length;
 const SEG_DEG = 360 / SEG_COUNT;
 
-export function Wheel({ result, onSpinRequest, onSpinComplete }: Props) {
+export function Wheel({ result, onSpinRequest, onSpinComplete, canSpinHere = false, waitingForName = null }: Props) {
   // The rotation we're animating *to*.
   const [rotation, setRotation] = useState(0);
   const [phase, setPhase] = useState<"idle" | "spinning" | "landed">("idle");
@@ -95,15 +97,18 @@ export function Wheel({ result, onSpinRequest, onSpinComplete }: Props) {
         <div className={styles.hub}>★</div>
       </div>
 
-      {phase === "idle" && (
+      {phase === "idle" && canSpinHere && (
         <button className={`primary ${styles.spinBtn}`} onClick={handleSpinClick}>
           SPIN
         </button>
       )}
-      {phase === "spinning" && (
-        <div style={{ fontFamily: "VT323, monospace", fontSize: "1.4rem", letterSpacing: "3px", color: "var(--ink-soft)" }}>
-          SPINNING...
+      {phase === "idle" && !canSpinHere && waitingForName && (
+        <div className={styles.waitingFor}>
+          Waiting for <span className={styles.waitingName}>{waitingForName}</span> to spin...
         </div>
+      )}
+      {phase === "spinning" && (
+        <div className={styles.spinningText}>SPINNING...</div>
       )}
 
       <AnimatePresence>

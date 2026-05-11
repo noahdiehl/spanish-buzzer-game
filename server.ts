@@ -40,6 +40,7 @@ function freshState(): GameState {
     answeredWrong: [],
     lockedTeamId: null,
     lockedMs: 0,
+    lastWinnerTeamId: null,
   };
 }
 
@@ -218,6 +219,7 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
         }
 
         state.lastJudgment = { teamId: winnerId, correct: true, pointsDelta: delta, modifier: usedModifier };
+        state.lastWinnerTeamId = winnerId;
         state.phase = "reveal";
         state.questionsAnswered += 1;
         state.modifier = null;
@@ -267,6 +269,7 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
         pointsDelta: delta,
         modifier: "trueque",
       };
+      state.lastWinnerTeamId = winnerId;
       state.phase = "reveal";
       state.questionsAnswered += 1;
       state.modifier = null;
@@ -286,6 +289,11 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
     }
     case "spinWheel": {
       if (state.phase !== "wheel") return;
+      if (state.wheelResult) return; // already spinning
+      // If there's a previous winner, only they can spin. Otherwise anyone (host fallback).
+      if (state.lastWinnerTeamId !== null) {
+        if (client.teamId !== state.lastWinnerTeamId) return;
+      }
       const pick = MODIFIERS[Math.floor(Math.random() * MODIFIERS.length)];
       state.wheelResult = pick.key;
       broadcast();

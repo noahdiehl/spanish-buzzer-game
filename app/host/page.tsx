@@ -122,13 +122,20 @@ export default function MainBoard() {
           </motion.div>
         )}
 
-        {state.phase === "wheel" && (
-          <Wheel
-            result={state.wheelResult}
-            onSpinRequest={() => send({ type: "spinWheel" })}
-            onSpinComplete={() => send({ type: "wheelDone" })}
-          />
-        )}
+        {state.phase === "wheel" && (() => {
+          const winnerTeam = state.lastWinnerTeamId !== null
+            ? state.teams.find((t) => t.id === state.lastWinnerTeamId)
+            : null;
+          return (
+            <Wheel
+              result={state.wheelResult}
+              onSpinRequest={() => send({ type: "spinWheel" })}
+              onSpinComplete={() => send({ type: "wheelDone" })}
+              canSpinHere={state.lastWinnerTeamId === null}
+              waitingForName={winnerTeam?.name ?? null}
+            />
+          );
+        })()}
 
         {(state.phase === "question" || state.phase === "buzzed") && (
           <>
