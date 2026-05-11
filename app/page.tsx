@@ -20,12 +20,25 @@ export default function PlayPage() {
       state?.phase === "minigame" &&
       state.minigame?.kind === "draw" &&
       state.minigame.status === "judging" &&
-      youAreTeamId !== null &&
-      !state.minigame.drawings[youAreTeamId]
+      youAreTeamId !== null
     ) {
       setDrawSubmitTrigger((n) => n + 1);
     }
-  }, [state?.phase, state?.minigame?.kind, state?.minigame?.status, state?.minigame?.drawings, youAreTeamId]);
+  }, [state?.phase, state?.minigame?.kind, state?.minigame?.status, youAreTeamId]);
+
+  // Periodic auto-submit during drawing — every 3s so the server always has the
+  // latest snapshot in case the connection drops or the deadline submit fails.
+  useEffect(() => {
+    if (
+      state?.phase !== "minigame" ||
+      state.minigame?.kind !== "draw" ||
+      state.minigame?.status !== "drawing"
+    ) return;
+    const id = setInterval(() => {
+      setDrawSubmitTrigger((n) => n + 1);
+    }, 3000);
+    return () => clearInterval(id);
+  }, [state?.phase, state?.minigame?.kind, state?.minigame?.status]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -136,7 +149,7 @@ export default function PlayPage() {
 
         {state.phase === "minigame" && state.minigame?.kind === "draw" && (() => {
           const mg = state.minigame!;
-          const canvasSize = Math.min(360, typeof window !== "undefined" ? window.innerWidth - 60 : 360);
+          const canvasSize = Math.min(260, typeof window !== "undefined" ? window.innerWidth - 60 : 260);
           return (
             <div className={styles.center}>
               <div className={styles.subtitle}>DRAW MARCO</div>

@@ -79,6 +79,7 @@ function freshState(): GameState {
     lastWinnerTeamId: null,
     minigame: null,
     minigameCount: 0,
+    bypassNextRoundCheck: false,
   };
 }
 
@@ -145,10 +146,20 @@ function startCountdown() {
 function _enterQuestionAfterCountdown() {
   state.phase = "question";
   state.lastJudgment = null;
-  if (state.modifier === "demora" && state.teams.length > 0) {
-    const victim = state.teams[Math.floor(Math.random() * state.teams.length)];
-    state.lockedTeamId = victim.id;
-    state.lockedMs = DEMORA_MS;
+  if (state.modifier === "demora") {
+    // Lock the spinner (the team that won the previous question).
+    // Fallback: random team if no winner yet (first round edge case).
+    let victimId: number | null = state.lastWinnerTeamId;
+    if (victimId === null && state.teams.length > 0) {
+      victimId = state.teams[Math.floor(Math.random() * state.teams.length)].id;
+    }
+    if (victimId !== null) {
+      state.lockedTeamId = victimId;
+      state.lockedMs = DEMORA_MS;
+    } else {
+      state.lockedTeamId = null;
+      state.lockedMs = 0;
+    }
   } else {
     state.lockedTeamId = null;
     state.lockedMs = 0;
@@ -290,11 +301,13 @@ function bananaTick() {
       mg.countdownMs = BANANA_EXIT_MS;
       break;
     case "exit":
-      // Done — advance
+      // Done — advance straight to next question (no winner reveal for banana)
       stopTimer();
       state.minigame = null;
-      state.questionIdx = (state.questionIdx + 1) % QUESTIONS.length;
-      startQuestion();
+      state.bypassNextRoundCheck = true;
+      state.phase = "reveal";
+      state.lastJudgment = null;
+      // The host auto-advance fires `next`, which will use the bypass flag.
       break;
   }
 }
@@ -415,14 +428,27 @@ function endMinigame() {
   broadcast();
   // Auto-advance to next question after 5s
   setTimeout(() => {
-    if (state.phase === "minigame") {
-      state.minigame = null;
-      // Skip wheel/minigame check on this advance — go straight to next question
-      state.questionIdx = (state.questionIdx + 1) % QUESTIONS.length;
-      startQuestion();
-      broadcast();
-    }
+    if (state.phase === "minigame") finalizeMinigameWin(ranked[0]?.teamId ?? null, awards[0]);
   }, 5000);
+}
+
+function finalizeMinigameWin(winnerTeamId: number | null, points: number) {
+  state.minigame = null;
+  if (winnerTeamId !== null) {
+    const team = state.teams.find((t) => t.id === winnerTeamId);
+    if (team) {
+      state.lastWinnerTeamId = winnerTeamId;
+      state.lastJudgment = {
+        teamId: winnerTeamId,
+        correct: true,
+        pointsDelta: points,
+        modifier: null,
+      };
+    }
+  }
+  state.phase = "reveal";
+  state.bypassNextRoundCheck = true;
+  broadcast();
 }
 
 // ====== END FLAPPY BIRD MINIGAME ======
@@ -555,12 +581,7 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       const winner = state.teams.find((t) => t.id === msg.winnerTeamId);
       if (!winner) return;
       winner.score += DRAW_WINNER_POINTS;
-      state.lastWinnerTeamId = winner.id;
-      // Auto-advance to next question
-      state.minigame = null;
-      state.questionIdx = (state.questionIdx + 1) % QUESTIONS.length;
-      startQuestion();
-      broadcast();
+      finalizeMinigameWin(winner.id, DRAW_WINNER_POINTS);
       return;
     }
     case "endGame": {
@@ -678,7 +699,8 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       };
       state.lastWinnerTeamId = winnerId;
       state.phase = "reveal";
-      state.questionsAnswered += 1;
+      // Only increment when this trade came from a correct answer (not the wheel).
+      if (!state.bypassNextRoundCheck) state.questionsAnswered += 1;
       state.modifier = null;
       state.answeredWrong = [];
       state.lockedTeamId = null;
@@ -687,8 +709,17 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       return;
     }
     case "next": {
-      if (state.phase === "timeout") {
-        // questionsAnswered was already bumped at round-end. Skip if mid-flow.
+      if (state.bypassNextRoundCheck) {
+        // After minigame win or wheel-triggered trade — just start the next
+        // question at the already-advanced questionIdx, no further wheel/minigame check.
+        state.bypassNextRoundCheck = false;
+        state.lastJudgment = null;
+        state.answeredWrong = [];
+        state.lockedTeamId = null;
+        state.lockedMs = 0;
+        startQuestion();
+        broadcast();
+        return;
       }
       advanceToNextQuestion();
       broadcast();
@@ -714,6 +745,14 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
         broadcast();
         return;
       }
+      // TRADE: spinner picks immediately, no waiting for a correct answer
+      if (state.modifier === "trueque" && state.lastWinnerTeamId !== null && state.teams.length > 1) {
+        state.phase = "tradeChoice";
+        state.buzzedTeamId = state.lastWinnerTeamId;
+        state.bypassNextRoundCheck = true;
+        broadcast();
+        return;
+      }
       startQuestion();
       broadcast();
       return;
@@ -735,11 +774,34 @@ app.prepare().then(() => {
     handle(req, res, parsedUrl);
   });
 
-  const wss = new WebSocketServer({ server, path: "/ws" });
+  const wss = new WebSocketServer({
+    server,
+    path: "/ws",
+    maxPayload: 4 * 1024 * 1024, // 4MB headroom for drawings
+    perMessageDeflate: { threshold: 1024 },
+  });
+
+  // Heartbeat: clients that don't respond to pings within 60s are dropped.
+  const heartbeat = setInterval(() => {
+    for (const client of clients) {
+      const ws = client.ws as WebSocket & { isAlive?: boolean };
+      if (ws.isAlive === false) {
+        ws.terminate();
+        continue;
+      }
+      ws.isAlive = false;
+      try { ws.ping(); } catch {}
+    }
+  }, 30000);
+  wss.on("close", () => clearInterval(heartbeat));
 
   wss.on("connection", (ws, req) => {
     const client: ClientInfo = { ws, teamId: null, token: null };
     clients.add(client);
+    (ws as WebSocket & { isAlive?: boolean }).isAlive = true;
+    ws.on("pong", () => {
+      (ws as WebSocket & { isAlive?: boolean }).isAlive = true;
+    });
 
     if (req.url && req.url.includes("role=board")) {
       stopTimer();

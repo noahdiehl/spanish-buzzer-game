@@ -436,7 +436,7 @@ export default function MainBoard() {
 
         {state.phase === "minigame" && state.minigame?.kind === "flappy" && (
           <div className={styles.minigameWrap}>
-            <h2 className={styles.minigameTitle}>FLAPPY MARCO — FOR 100,000 POINTS</h2>
+            <h2 className={styles.minigameTitle}>FLAPPY MARCO</h2>
             <Flappy mg={state.minigame} teams={state.teams} height={520} width={820} />
           </div>
         )}

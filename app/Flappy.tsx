@@ -256,7 +256,7 @@ export function Flappy({ mg, teams, highlightTeamId, height, width }: Props) {
                     letterSpacing: 3,
                   }}
                 >
-                  100,000 POINTS!
+                  +10,000 POINTS!
                 </motion.div>
               </>
             ) : (

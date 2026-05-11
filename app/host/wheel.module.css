@@ -138,9 +138,8 @@
   align-items: center;
   justify-content: center;
   gap: 18px;
-  background: rgba(244, 232, 207, 0.92);
+  background: var(--paper);
   z-index: 8000;
-  backdrop-filter: blur(4px);
 }
 
 .resultImg {

@@ -112,6 +112,9 @@ export interface GameState {
   minigame: MinigameState | null;
   // Counter incremented every minigame; used to cycle between flappy / draw / etc.
   minigameCount: number;
+  // When true, the next `next` advance skips the wheel/minigame trigger check
+  // (used after wheel-triggered trades and after minigame wins).
+  bypassNextRoundCheck: boolean;
 }
 
 export type ClientMsg =

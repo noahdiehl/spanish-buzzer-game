@@ -36,13 +36,13 @@ export function DrawCanvas({ size, strokeColor = "#2e2418", onSubmit, submitTrig
     ctx.lineJoin = "round";
   }, [size, strokeColor]);
 
-  // Handle submit on trigger change
+  // Handle submit on trigger change — use JPEG quality 0.5 to keep payload small.
   useEffect(() => {
     if (submitTrigger === 0) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     try {
-      const url = canvas.toDataURL("image/png");
+      const url = canvas.toDataURL("image/jpeg", 0.5);
       onSubmit(url);
     } catch {}
   }, [submitTrigger, onSubmit]);

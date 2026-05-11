@@ -47,11 +47,11 @@ export function Wheel({ result, onSpinRequest, onSpinComplete, canSpinHere = fal
     if (phase !== "spinning") return;
     setPhase("landed");
     setShowResult(true);
-    // give the user 3.5s to read the modifier, then continue
+    // give the user 2s to read the modifier, then continue
     setTimeout(() => {
       setShowResult(false);
       onSpinComplete();
-    }, 3500);
+    }, 2000);
   }
 
   return (
