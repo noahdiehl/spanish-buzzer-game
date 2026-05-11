@@ -1,0 +1,201 @@
+.shell {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+  padding: 16px;
+}
+
+.play {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  border: 4px solid var(--ink);
+  border-radius: 24px;
+  padding: 18px;
+  gap: 16px;
+  background: var(--panel);
+  box-shadow: 0 8px 0 0 var(--ink);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: 'VT323', monospace;
+  font-size: 1.3rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-bottom: 3px dashed var(--ink);
+  color: var(--ink);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.headerName {
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  font-size: 1.4rem;
+  letter-spacing: 1px;
+}
+
+.center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  text-align: center;
+  padding: 16px;
+  min-width: 0;
+}
+
+.title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 1.6rem;
+  letter-spacing: 3px;
+  color: var(--ink);
+  line-height: 1.5;
+  text-shadow: 3px 3px 0 var(--amber);
+}
+.subtitle {
+  font-family: 'VT323', monospace;
+  font-size: 1.6rem;
+  letter-spacing: 3px;
+  color: var(--ink);
+}
+.hint {
+  font-family: 'VT323', monospace;
+  color: var(--ink-soft);
+  letter-spacing: 2px;
+  font-size: 1.2rem;
+}
+
+.form { display: flex; flex-direction: column; gap: 18px; align-items: center; }
+.error {
+  color: var(--tomato);
+  letter-spacing: 2px;
+  font-family: 'VT323', monospace;
+  font-size: 1.2rem;
+}
+
+.buzzButton {
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  background: var(--panel);
+  padding: 38px 48px;
+  text-align: center;
+  letter-spacing: 4px;
+  cursor: pointer;
+  user-select: none;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  color: var(--ink);
+  max-width: 86vw;
+}
+.buzzSmall {
+  font-family: 'VT323', monospace;
+  font-size: 1.4rem;
+  letter-spacing: 6px;
+  color: var(--ink-soft);
+}
+.buzzBig {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 3rem;
+  letter-spacing: 10px;
+  margin-top: 12px;
+  color: currentColor;
+}
+
+.submitted {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.submittedImg {
+  max-height: 50vh;
+  max-width: 80vw;
+  border: 4px solid var(--ink);
+  border-radius: 20px;
+  box-shadow: 0 8px 0 0 var(--ink);
+  object-fit: contain;
+  background: var(--panel);
+}
+.submittedText {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 1.8rem;
+  letter-spacing: 4px;
+  text-shadow: 3px 3px 0 var(--ink);
+}
+
+.lockOverlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  border: 4px solid var(--tomato);
+  border-radius: 22px;
+  padding: 32px 56px;
+  background: var(--panel);
+  box-shadow: 0 8px 0 0 var(--ink);
+}
+.lockLabel {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 2.2rem;
+  letter-spacing: 6px;
+  color: var(--tomato);
+  text-shadow: 4px 4px 0 var(--ink);
+}
+.lockNum {
+  font-size: 6rem;
+  line-height: 1;
+  color: var(--tomato);
+  text-shadow: 0 0 24px var(--tomato);
+}
+
+.tradeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  width: 100%;
+  max-width: 600px;
+}
+.tradeBtn {
+  background: var(--panel);
+  border: 3px solid;
+  border-radius: 16px;
+  padding: 18px;
+  cursor: pointer;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: 0 5px 0 0 var(--ink);
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.tradeBtn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 0 0 var(--ink);
+  filter: brightness(1.05);
+}
+.tradeBtn:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 0 var(--ink);
+}
+.tradeName {
+  font-size: 1.2rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.tradeScore {
+  font-family: 'VT323', monospace;
+  font-size: 2rem;
+  color: var(--ink);
+}

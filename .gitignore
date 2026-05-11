@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+
+# next.js build output
+.next/
+out/
+
+# typescript build info
+*.tsbuildinfo
+next-env.d.ts
+
+# debug / logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files
+.env
+.env*.local
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# claude tooling
+.claude/
+
+# raw screenshots (the served images are already copied to public/marco/)
+assets/

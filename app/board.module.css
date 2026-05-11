@@ -1,0 +1,285 @@
+.board {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  padding: 28px;
+  gap: 24px;
+}
+
+.teamRow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+}
+
+.teamBox {
+  border: 3px solid var(--ink);
+  border-radius: 14px;
+  padding: 10px 18px 10px 22px;
+  text-align: left;
+  background: var(--panel);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  box-shadow: 0 5px 0 0 var(--ink);
+  position: relative;
+  overflow: hidden;
+}
+.teamBox::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 8px;
+  background: currentColor;
+}
+
+.teamSlot {
+  font-family: 'VT323', monospace;
+  font-size: 1rem;
+  letter-spacing: 3px;
+  color: var(--ink-soft);
+  padding-left: 6px;
+}
+.teamName {
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.teamScore {
+  font-family: 'VT323', monospace;
+  font-size: 2.4rem;
+  line-height: 1;
+  color: var(--ink);
+}
+.empty {
+  color: var(--ink-soft);
+  font-size: 1rem;
+  font-style: italic;
+}
+
+.teamOut {
+  opacity: 0.5;
+  filter: grayscale(0.7);
+}
+.outBadge {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.7rem;
+  color: var(--tomato);
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 var(--ink);
+}
+.lockBadge {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  font-family: 'VT323', monospace;
+  font-size: 1.2rem;
+  color: var(--tomato);
+  letter-spacing: 1px;
+}
+
+.plus500 {
+  position: absolute;
+  right: 18px;
+  bottom: 14px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 2.2rem;
+  letter-spacing: 2px;
+  text-shadow: 3px 3px 0 var(--ink);
+  pointer-events: none;
+  z-index: 10;
+}
+
+.center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 36px;
+  text-align: center;
+}
+
+.title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 2.8rem;
+  letter-spacing: 4px;
+  color: var(--ink);
+  line-height: 1.4;
+  text-shadow: 4px 4px 0 var(--amber);
+}
+.subtitle {
+  font-family: 'VT323', monospace;
+  font-size: 1.8rem;
+  letter-spacing: 4px;
+  color: var(--ink-soft);
+}
+
+.lobby { display: flex; flex-direction: column; align-items: center; gap: 36px; }
+
+.question {
+  font-size: 9rem;
+  font-weight: 700;
+  letter-spacing: 4px;
+  color: var(--ink);
+  background: var(--panel);
+  border: 4px solid var(--ink);
+  border-radius: 24px;
+  padding: 32px 80px;
+  box-shadow: 0 10px 0 0 var(--ink);
+}
+
+.timer {
+  font-size: 11rem;
+  line-height: 1;
+  color: var(--ink);
+}
+.timerFlash {
+  animation: timerFlash 0.5s steps(2, end) infinite;
+  color: var(--tomato);
+  text-shadow: 0 0 32px var(--tomato), 0 0 8px var(--tomato);
+}
+@keyframes timerFlash {
+  0%   { opacity: 1; transform: scale(1.05); }
+  50%  { opacity: 0.35; transform: scale(0.95); }
+  100% { opacity: 1; transform: scale(1.05); }
+}
+
+.buzzed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  border: 4px solid var(--ink);
+  border-radius: 28px;
+  padding: 40px 80px;
+  background: var(--panel);
+  box-shadow: 0 10px 0 0 var(--ink);
+  position: relative;
+  overflow: hidden;
+}
+.buzzed::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 14px;
+  background: var(--amber);
+}
+.buzzedLabel {
+  font-family: 'VT323', monospace;
+  font-size: 1.6rem;
+  letter-spacing: 8px;
+  color: var(--ink-soft);
+}
+.buzzedName {
+  font-size: 5rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.judgeRow { display: flex; gap: 20px; margin-top: 12px; }
+.judgeRow button { font-size: 1.4rem; padding: 18px 36px; }
+
+.timeout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+.loseImg {
+  max-height: 60vh;
+  max-width: 70vw;
+  border: 4px solid var(--ink);
+  border-radius: 24px;
+  box-shadow: 0 10px 0 0 var(--ink);
+  object-fit: contain;
+  background: var(--panel);
+}
+
+.reveal { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.qCounter {
+  font-family: 'VT323', monospace;
+  font-size: 1.4rem;
+  letter-spacing: 3px;
+  color: var(--ink-soft);
+}
+
+.modBanner {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  border: 3px solid;
+  border-radius: 14px;
+  padding: 8px 24px;
+  background: var(--panel);
+  box-shadow: 0 4px 0 0 var(--ink);
+  font-family: 'Press Start 2P', monospace;
+}
+.modLabel { font-size: 1.4rem; letter-spacing: 4px; text-shadow: 3px 3px 0 var(--ink); }
+.modDesc { font-family: 'VT323', monospace; font-size: 1.3rem; letter-spacing: 2px; color: var(--ink); }
+
+.ready {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+.readyLabel {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 2.4rem;
+  letter-spacing: 6px;
+  color: var(--amber);
+  text-shadow: 4px 4px 0 var(--ink);
+}
+.readyNum {
+  font-size: 14rem;
+  line-height: 1;
+  color: var(--tomato);
+  text-shadow: 0 0 32px var(--tomato);
+}
+
+.mirrored { transform: scaleX(-1); }
+.timerHidden { color: var(--ink-soft); opacity: 0.5; }
+.goodText {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 3rem;
+  letter-spacing: 6px;
+  color: var(--avocado);
+  text-shadow: 4px 4px 0 var(--ink);
+}
+
+/* === FULL-SCREEN NUCLEAR FLASH === */
+.nukeFlash {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  pointer-events: none;
+  background: rgba(255, 30, 0, 0.55);
+  mix-blend-mode: multiply;
+  animation: nukeFlash 0.6s steps(2, end) infinite;
+  box-shadow: inset 0 0 200px rgba(255, 0, 0, 0.9);
+}
+@keyframes nukeFlash {
+  0%   { opacity: 0; }
+  50%  { opacity: 1; }
+  100% { opacity: 0; }
+}
