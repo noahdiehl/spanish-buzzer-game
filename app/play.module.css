@@ -133,6 +133,15 @@
   text-shadow: 3px 3px 0 var(--ink);
 }
 
+.flapBtn {
+  font-size: 1.2rem !important;
+  padding: 18px 36px !important;
+  letter-spacing: 4px !important;
+  background: var(--amber) !important;
+  width: 100%;
+  max-width: 360px;
+}
+
 .countdownNum {
   font-family: 'Press Start 2P', monospace;
   font-size: 10rem;

@@ -267,11 +267,36 @@
   text-shadow: 4px 4px 0 var(--ink);
 }
 
+.teamsLeftBadge {
+  font-family: 'VT323', monospace;
+  font-size: 1.4rem;
+  letter-spacing: 3px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  border: 2px dashed var(--ink);
+  border-radius: 10px;
+  padding: 6px 16px;
+}
+
+.minigameWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+.minigameTitle {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 1.6rem;
+  letter-spacing: 4px;
+  color: var(--amber);
+  text-shadow: 4px 4px 0 var(--ink);
+}
+
 /* === HAMBURGER MENU === */
 .menuWrap {
   position: fixed;
   bottom: 18px;
-  right: 18px;
+  left: 18px;
   z-index: 100;
 }
 .hamburger {
@@ -297,7 +322,7 @@
 .menuPanel {
   position: absolute;
   bottom: 64px;
-  right: 0;
+  left: 0;
   background: var(--panel);
   border: 3px solid var(--ink);
   border-radius: 14px;

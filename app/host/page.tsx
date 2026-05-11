@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGame } from "@/lib/useGame";
 import { AnimatePresence, motion } from "framer-motion";
 import styles from "./board.module.css";
 import { MODIFIERS } from "@/lib/types";
 import { Wheel } from "./Wheel";
+import { Flappy } from "../Flappy";
 
 // warm muted team palette: coral, teal, mustard, plum
 const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
@@ -14,6 +15,11 @@ export default function MainBoard() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scoreOpen, setScoreOpen] = useState(false);
   const [draftScores, setDraftScores] = useState<Record<number, string>>({});
+  const nukeAudioRef = useRef<HTMLAudioElement | null>(null);
+  const nukePlayedRef = useRef(false);
+  const buzzAudioRef = useRef<HTMLAudioElement | null>(null);
+  const lastBuzzedRef = useRef<number | null>(null);
+  const flappyMusicRef = useRef<HTMLAudioElement | null>(null);
 
   // Auto-advance the reveal screen after 1.5s so the host doesn't have to click NEXT every round.
   useEffect(() => {
@@ -22,20 +28,75 @@ export default function MainBoard() {
     return () => clearTimeout(t);
   }, [state?.phase, send]);
 
+  // Buzz sound: play when any team buzzes (phase enters "buzzed" with a new team).
+  useEffect(() => {
+    if (state?.phase === "buzzed" && state.buzzedTeamId !== null) {
+      if (lastBuzzedRef.current !== state.buzzedTeamId) {
+        lastBuzzedRef.current = state.buzzedTeamId;
+        const a = buzzAudioRef.current;
+        if (a) {
+          a.currentTime = 0;
+          a.play().catch(() => {});
+        }
+      }
+    } else {
+      lastBuzzedRef.current = null;
+    }
+  }, [state?.phase, state?.buzzedTeamId]);
+
+  // Flappy bird music — plays during the entire minigame phase (intro + playing + over).
+  useEffect(() => {
+    const audio = flappyMusicRef.current;
+    if (!audio) return;
+    if (state?.phase === "minigame") {
+      audio.volume = 0.6;
+      audio.loop = true;
+      if (audio.paused) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      }
+    } else {
+      if (!audio.paused) audio.pause();
+      audio.currentTime = 0;
+    }
+  }, [state?.phase]);
+
+  // Nuclear countdown audio: starts 3 sec before the 9-sec danger window (timerMs <= 12000)
+  // so the 3-sec intro plays and the actual countdown audio aligns with timerMs <= 9000.
+  useEffect(() => {
+    const audio = nukeAudioRef.current;
+    if (!audio) return;
+    const phase = state?.phase;
+    const timerMs = state?.timerMs ?? 0;
+    const mudo = state?.modifier === "mudo";
+    if (phase !== "question" || mudo || timerMs > 12000) {
+      if (!audio.paused) audio.pause();
+      audio.currentTime = 0;
+      nukePlayedRef.current = false;
+      return;
+    }
+    if (!nukePlayedRef.current) {
+      nukePlayedRef.current = true;
+      audio.currentTime = Math.max(0, (12000 - timerMs) / 1000);
+      audio.play().catch(() => {});
+    }
+  }, [state?.phase, state?.timerMs, state?.modifier]);
+
   if (!state) {
     return <div className={styles.center}>{connected ? "LOADING..." : "CONNECTING..."}</div>;
   }
 
   const seconds = (state.timerMs / 1000).toFixed(1);
-  const danger = state.phase === "question" && state.timerMs <= 5000;
+  const danger = state.phase === "question" && state.timerMs <= 9000;
   const hideTimer = state.modifier === "mudo";
   const activeMod = state.modifier ? MODIFIERS.find((m) => m.key === state.modifier) : null;
-  // Hide top scores during countdown + question + buzzed + ended (slide them out).
+  // Hide top scores during countdown + question + buzzed + ended + minigame (slide them out).
   const scoresHidden =
     state.phase === "countdown" ||
     state.phase === "question" ||
     state.phase === "buzzed" ||
-    state.phase === "ended";
+    state.phase === "ended" ||
+    state.phase === "minigame";
 
   function openEditScores() {
     if (!state) return;
@@ -318,6 +379,13 @@ export default function MainBoard() {
           </motion.div>
         )}
 
+        {state.phase === "minigame" && state.minigame && (
+          <div className={styles.minigameWrap}>
+            <h2 className={styles.minigameTitle}>MINI GAME — FLAPPY MARCO</h2>
+            <Flappy mg={state.minigame} teams={state.teams} height={520} width={820} />
+          </div>
+        )}
+
         {state.phase === "countdown" && (
           <motion.div
             key={Math.ceil(state.timerMs / 1000)}
@@ -422,6 +490,11 @@ export default function MainBoard() {
                 {seconds}
               </motion.div>
             )}
+            {state.phase === "question" && state.answeredWrong.length > 0 && (
+              <div className={styles.teamsLeftBadge}>
+                {state.teams.length - state.answeredWrong.length} TEAM{state.teams.length - state.answeredWrong.length === 1 ? "" : "S"} LEFT TO BUZZ
+              </div>
+            )}
             {state.phase === "question" && hideTimer && (
               <div className={`${styles.timer} ${styles.timerHidden} terminal`}>--.--</div>
             )}
@@ -473,8 +546,15 @@ export default function MainBoard() {
         <div className={styles.qCounter}>Q {state.questionsAnswered + 1}</div>
       </div>
 
-      {/* Full-screen red nuclear flash overlay when timer ≤ 5s */}
+      {/* Full-screen red nuclear flash overlay when timer ≤ 9s */}
       {danger && !hideTimer && <div className={styles.nukeFlash} />}
+
+      {/* Nuke countdown audio */}
+      <audio ref={nukeAudioRef} src="/sounds/nuke.mp3" preload="auto" />
+      {/* Buzz sound */}
+      <audio ref={buzzAudioRef} src="/sounds/buzz.mp3" preload="auto" />
+      {/* Flappy minigame background music */}
+      <audio ref={flappyMusicRef} src="/sounds/nostalgic.mp3" preload="auto" />
     </div>
   );
 }

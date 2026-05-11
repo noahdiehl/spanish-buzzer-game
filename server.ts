@@ -3,7 +3,7 @@ import { parse } from "url";
 import { randomUUID } from "crypto";
 import next from "next";
 import { WebSocketServer, WebSocket } from "ws";
-import type { ClientMsg, GameState, ServerMsg, Team, ModifierKey } from "./lib/types";
+import type { ClientMsg, GameState, ServerMsg, Team, ModifierKey, MinigameState, FlappyPipe } from "./lib/types";
 import { MODIFIERS } from "./lib/types";
 import { QUESTIONS } from "./lib/questions";
 
@@ -19,6 +19,20 @@ const TICK_MS = 100;
 const DEMORA_MS = 4000;
 const COUNTDOWN_MS = 3000;
 const WHEEL_EVERY = 3;
+const MINIGAME_EVERY = 5;
+
+// Flappy bird constants (normalized 0..1)
+const FLAPPY_TICK_MS = 33;
+const FLAPPY_INTRO_MS = 3000;
+const FLAPPY_MAX_MS = 60000;
+const FLAPPY_GRAVITY = 1.6;       // per second
+const FLAPPY_JUMP_VY = -0.6;
+const FLAPPY_PIPE_SPEED = 0.22;   // per second
+const FLAPPY_PIPE_GAP = 0.32;
+const FLAPPY_PIPE_INTERVAL_MS = 1500;
+const FLAPPY_BIRD_X = 0.3;
+const FLAPPY_BIRD_RADIUS = 0.04;
+const FLAPPY_PIPE_WIDTH = 0.09;
 
 interface ClientInfo {
   ws: WebSocket;
@@ -46,6 +60,7 @@ function freshState(): GameState {
     lockedTeamId: null,
     lockedMs: 0,
     lastWinnerTeamId: null,
+    minigame: null,
   };
 }
 
@@ -123,6 +138,151 @@ function _enterQuestionAfterCountdown() {
   startTimer(false);
 }
 
+// ====== FLAPPY BIRD MINIGAME ======
+
+let pipeIdCounter = 0;
+let flappyPipeTimer = 0;
+
+function startMinigame() {
+  stopTimer();
+  state.phase = "minigame";
+  state.question = null;
+  state.buzzedTeamId = null;
+  state.modifier = null;
+  state.wheelResult = null;
+  state.answeredWrong = [];
+  state.lockedTeamId = null;
+  state.lockedMs = 0;
+
+  const mg: MinigameState = {
+    status: "intro",
+    countdownMs: FLAPPY_INTRO_MS,
+    elapsedMs: 0,
+    birds: state.teams.map((t) => ({
+      teamId: t.id,
+      y: 0.5,
+      vy: 0,
+      alive: true,
+      scoreMs: 0,
+    })),
+    pipes: [],
+  };
+  state.minigame = mg;
+  flappyPipeTimer = 0;
+  pipeIdCounter = 0;
+
+  tickInterval = setInterval(() => {
+    minigameTick();
+    broadcast();
+  }, FLAPPY_TICK_MS);
+}
+
+function minigameTick() {
+  const mg = state.minigame;
+  if (!mg) return;
+  const dt = FLAPPY_TICK_MS / 1000;
+
+  if (mg.status === "intro") {
+    mg.countdownMs -= FLAPPY_TICK_MS;
+    if (mg.countdownMs <= 0) {
+      mg.status = "playing";
+      mg.countdownMs = 0;
+    }
+    return;
+  }
+
+  if (mg.status !== "playing") return;
+
+  mg.elapsedMs += FLAPPY_TICK_MS;
+
+  // Physics for each alive bird
+  for (const bird of mg.birds) {
+    if (!bird.alive) continue;
+    bird.vy += FLAPPY_GRAVITY * dt;
+    bird.y += bird.vy * dt;
+    // Ground / ceiling
+    if (bird.y >= 1 || bird.y <= 0) {
+      bird.alive = false;
+      bird.y = Math.max(0, Math.min(1, bird.y));
+      bird.scoreMs = mg.elapsedMs;
+    }
+  }
+
+  // Move pipes left
+  for (const pipe of mg.pipes) pipe.x -= FLAPPY_PIPE_SPEED * dt;
+  mg.pipes = mg.pipes.filter((p) => p.x > -0.2);
+
+  // Spawn pipes
+  flappyPipeTimer += FLAPPY_TICK_MS;
+  if (flappyPipeTimer >= FLAPPY_PIPE_INTERVAL_MS) {
+    flappyPipeTimer = 0;
+    mg.pipes.push({
+      id: pipeIdCounter++,
+      x: 1.15,
+      gapY: 0.25 + Math.random() * 0.5,
+    });
+  }
+
+  // Collisions
+  for (const bird of mg.birds) {
+    if (!bird.alive) continue;
+    for (const pipe of mg.pipes) {
+      // Bird x range vs pipe x range
+      const bxL = FLAPPY_BIRD_X - FLAPPY_BIRD_RADIUS;
+      const bxR = FLAPPY_BIRD_X + FLAPPY_BIRD_RADIUS;
+      const pxL = pipe.x - FLAPPY_PIPE_WIDTH / 2;
+      const pxR = pipe.x + FLAPPY_PIPE_WIDTH / 2;
+      if (bxR > pxL && bxL < pxR) {
+        const gapTop = pipe.gapY - FLAPPY_PIPE_GAP / 2;
+        const gapBot = pipe.gapY + FLAPPY_PIPE_GAP / 2;
+        if (bird.y - FLAPPY_BIRD_RADIUS < gapTop || bird.y + FLAPPY_BIRD_RADIUS > gapBot) {
+          bird.alive = false;
+          bird.scoreMs = mg.elapsedMs;
+          break;
+        }
+      }
+    }
+  }
+
+  // Keep alive birds' scoreMs updated to current elapsed
+  for (const bird of mg.birds) {
+    if (bird.alive) bird.scoreMs = mg.elapsedMs;
+  }
+
+  // End conditions
+  const aliveCount = mg.birds.filter((b) => b.alive).length;
+  if (aliveCount === 0 || mg.elapsedMs >= FLAPPY_MAX_MS) {
+    endMinigame();
+  }
+}
+
+function endMinigame() {
+  const mg = state.minigame;
+  if (!mg) return;
+  mg.status = "over";
+  stopTimer();
+  // Award points by survival time rank
+  const ranked = [...mg.birds].sort((a, b) => b.scoreMs - a.scoreMs);
+  const awards = [1000, 500, 200, 0];
+  ranked.forEach((b, i) => {
+    const team = state.teams.find((t) => t.id === b.teamId);
+    if (team) team.score += awards[i] ?? 0;
+  });
+  broadcast();
+  // Auto-advance to next question after 5s
+  setTimeout(() => {
+    if (state.phase === "minigame") {
+      state.minigame = null;
+      // Skip wheel/minigame check on this advance — go straight to next question
+      state.questionIdx = (state.questionIdx + 1) % QUESTIONS.length;
+      startQuestion();
+      broadcast();
+    }
+  }, 5000);
+}
+
+// ====== END FLAPPY BIRD MINIGAME ======
+
 function applyCorrectScore(team: Team, mod: ModifierKey | null) {
   switch (mod) {
     case "doble":   team.score = team.score * 2; break;
@@ -138,6 +298,11 @@ function startQuestion() {
 }
 
 function beginNextRound() {
+  // Minigame takes priority over wheel
+  if (state.questionsAnswered > 0 && state.questionsAnswered % MINIGAME_EVERY === 0) {
+    startMinigame();
+    return;
+  }
   if (state.questionsAnswered > 0 && state.questionsAnswered % WHEEL_EVERY === 0) {
     state.phase = "wheel";
     state.wheelResult = null;
@@ -220,6 +385,15 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       client.token = msg.token;
       team.connected = true;
       broadcast();
+      return;
+    }
+    case "flap": {
+      if (state.phase !== "minigame" || !state.minigame) return;
+      if (state.minigame.status !== "playing") return;
+      if (client.teamId === null) return;
+      const bird = state.minigame.birds.find((b) => b.teamId === client.teamId);
+      if (bird && bird.alive) bird.vy = FLAPPY_JUMP_VY;
+      // No broadcast here — next tick will broadcast naturally
       return;
     }
     case "endGame": {

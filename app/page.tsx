@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useGame } from "@/lib/useGame";
+import { Flappy } from "./Flappy";
 import styles from "./play.module.css";
 
 const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
@@ -12,7 +13,15 @@ export default function PlayPage() {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.code !== "Space" || youAreTeamId === null || state?.phase !== "question") return;
+      if (e.code !== "Space" || youAreTeamId === null) return;
+      // Minigame: spacebar = flap
+      if (state?.phase === "minigame" && state.minigame?.status === "playing") {
+        e.preventDefault();
+        send({ type: "flap" });
+        return;
+      }
+      // Regular question: spacebar = buzz (with locks)
+      if (state?.phase !== "question") return;
       const isLocked = state.lockedTeamId === youAreTeamId && state.lockedMs > 0;
       const alreadyWrong = state.answeredWrong.includes(youAreTeamId);
       if (isLocked || alreadyWrong) return;
@@ -21,7 +30,7 @@ export default function PlayPage() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [send, state?.phase, state?.lockedTeamId, state?.lockedMs, state?.answeredWrong, youAreTeamId]);
+  }, [send, state?.phase, state?.minigame?.status, state?.lockedTeamId, state?.lockedMs, state?.answeredWrong, youAreTeamId]);
 
   if (!state) {
     return <div className={styles.center}>{connected ? "LOADING..." : "CONNECTING..."}</div>;
@@ -73,6 +82,35 @@ export default function PlayPage() {
           <div className={styles.center}>
             <p className={styles.subtitle}>WAITING TO START...</p>
             <p className={styles.hint}>{state.teams.length}/4 TEAMS</p>
+          </div>
+        )}
+
+        {state.phase === "minigame" && state.minigame && (
+          <div className={styles.center}>
+            <div className={styles.subtitle}>FLAPPY MARCO</div>
+            <Flappy
+              mg={state.minigame}
+              teams={state.teams}
+              highlightTeamId={youAreTeamId}
+              width={Math.min(360, window.innerWidth - 60)}
+              height={Math.min(360, window.innerWidth - 60)}
+            />
+            {state.minigame.status === "playing" && (() => {
+              const myBird = state.minigame!.birds.find((b) => b.teamId === youAreTeamId);
+              if (!myBird?.alive) {
+                return <div className={styles.hint}>YOU CRASHED — watch the rest</div>;
+              }
+              return (
+                <motion.button
+                  className={`primary ${styles.flapBtn}`}
+                  onClick={() => send({ type: "flap" })}
+                  whileTap={{ scale: 0.9 }}
+                  whileHover={{ scale: 1.04 }}
+                >
+                  TAP / SPACE TO FLAP
+                </motion.button>
+              );
+            })()}
           </div>
         )}
 

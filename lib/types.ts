@@ -8,7 +8,8 @@ export type Phase =
   | "ready"
   | "tradeChoice"
   | "countdown"
-  | "ended";
+  | "ended"
+  | "minigame";
 
 export type ModifierKey =
   | "doble"
@@ -44,6 +45,28 @@ export interface Team {
   connected: boolean;
 }
 
+export interface FlappyBird {
+  teamId: number;
+  y: number;       // 0 = top, 1 = bottom
+  vy: number;      // velocity (per second)
+  alive: boolean;
+  scoreMs: number; // frozen at death; equals elapsedMs if still alive
+}
+
+export interface FlappyPipe {
+  id: number;
+  x: number;       // 0 = left edge, 1 = right edge
+  gapY: number;    // center of gap (0..1)
+}
+
+export interface MinigameState {
+  status: "intro" | "playing" | "over";
+  countdownMs: number; // for intro
+  elapsedMs: number;   // since playing started
+  birds: FlappyBird[];
+  pipes: FlappyPipe[];
+}
+
 export interface GameState {
   phase: Phase;
   teams: Team[];
@@ -67,6 +90,8 @@ export interface GameState {
   lockedMs: number;
   // Team that won the most recent question — gets to spin the next wheel
   lastWinnerTeamId: number | null;
+  // Active minigame state (flappy bird) — null when not in minigame phase
+  minigame: MinigameState | null;
 }
 
 export type ClientMsg =
@@ -80,6 +105,7 @@ export type ClientMsg =
   | { type: "tradeChoice"; targetTeamId: number }
   | { type: "endGame" }
   | { type: "setScore"; teamId: number; score: number }
+  | { type: "flap" }
   | { type: "resume"; token: string }
   | { type: "reset" };
 
