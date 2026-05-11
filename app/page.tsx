@@ -1,252 +1,206 @@
 "use client";
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { useGame } from "@/lib/useGame";
-import { AnimatePresence, motion } from "framer-motion";
-import styles from "./board.module.css";
-import { MODIFIERS } from "@/lib/types";
-import { Wheel } from "./Wheel";
+import styles from "./play.module.css";
 
-// warm muted team palette: coral, teal, mustard, plum
 const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
 
-export default function MainBoard() {
-  const { state, send, connected } = useGame("board");
+export default function PlayPage() {
+  const { state, youAreTeamId, send, connected, error } = useGame("player");
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.code !== "Space" || youAreTeamId === null || state?.phase !== "question") return;
+      const isLocked = state.lockedTeamId === youAreTeamId && state.lockedMs > 0;
+      const alreadyWrong = state.answeredWrong.includes(youAreTeamId);
+      if (isLocked || alreadyWrong) return;
+      e.preventDefault();
+      send({ type: "buzz" });
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [send, state?.phase, state?.lockedTeamId, state?.lockedMs, state?.answeredWrong, youAreTeamId]);
 
   if (!state) {
     return <div className={styles.center}>{connected ? "LOADING..." : "CONNECTING..."}</div>;
   }
 
-  const seconds = (state.timerMs / 1000).toFixed(1);
-  const danger = state.phase === "question" && state.timerMs <= 5000;
-  const hideTimer = state.modifier === "mudo";
-  const activeMod = state.modifier ? MODIFIERS.find((m) => m.key === state.modifier) : null;
+  if (youAreTeamId === null) {
+    return (
+      <div className={styles.shell}>
+        <div className={styles.center}>
+          <h1 className={styles.title}>:: TEAM NAME ::</h1>
+          <p className={styles.subtitle}>{state.teams.length}/4 SLOTS FILLED</p>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (name.trim()) send({ type: "join", name: name.trim() });
+            }}
+            className={styles.form}
+          >
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="TEAM NAME"
+              maxLength={24}
+            />
+            <button type="submit" className="primary" disabled={!name.trim() || state.teams.length >= 4}>
+              CONNECT
+            </button>
+          </form>
+          {error && <div className={styles.error}>{error}</div>}
+        </div>
+      </div>
+    );
+  }
+
+  const me = state.teams.find((t) => t.id === youAreTeamId);
+  const color = TEAM_COLORS[youAreTeamId];
+  const isMyBuzz = state.buzzedTeamId === youAreTeamId;
 
   return (
-    <div className={styles.board}>
-      {/* TEAM BOXES */}
-      <div className={styles.teamRow}>
-        {[0, 1, 2, 3].map((i) => {
-          const team = state.teams.find((t) => t.id === i);
-          const color = TEAM_COLORS[i];
-          const isBuzzed = state.buzzedTeamId === i;
-          const justWon =
-            state.phase === "reveal" &&
-            state.lastJudgment?.correct &&
-            state.lastJudgment.teamId === i;
-          const isOut = state.answeredWrong.includes(i);
-          const isLocked = state.lockedTeamId === i && state.lockedMs > 0;
+    <div className={styles.shell}>
+      <div className={styles.play} style={{ borderColor: color }}>
+        <div className={styles.header} style={{ color }}>
+          <span className={styles.headerName}>{me?.name}</span>
+          <span>SCORE: {me?.score ?? 0}</span>
+        </div>
+
+        {state.phase === "lobby" && (
+          <div className={styles.center}>
+            <p className={styles.subtitle}>WAITING TO START...</p>
+            <p className={styles.hint}>{state.teams.length}/4 TEAMS</p>
+          </div>
+        )}
+
+        {state.phase === "question" && (() => {
+          const isLocked = state.lockedTeamId === youAreTeamId && state.lockedMs > 0;
+          const alreadyWrong = state.answeredWrong.includes(youAreTeamId!);
+          const disabled = isLocked || alreadyWrong;
           return (
-            <motion.div
-              key={i}
-              className={`${styles.teamBox} ${isOut ? styles.teamOut : ""}`}
-              animate={{
-                scale: isBuzzed ? 1.08 : 1,
-                boxShadow: isBuzzed
-                  ? `0 0 60px ${color}, inset 0 0 40px ${color}`
-                  : `0 0 16px ${color}55, inset 0 0 16px ${color}33`,
-              }}
-              transition={{ type: "spring", stiffness: 400, damping: 18 }}
-              style={{ borderColor: color, color }}
-            >
+            <div className={styles.center}>
               {isLocked && (
-                <div className={styles.lockBadge}>
-                  🔒 {Math.ceil(state.lockedMs / 1000)}
+                <motion.div
+                  className={styles.lockOverlay}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: "spring", stiffness: 300, damping: 16 }}
+                >
+                  <div className={styles.lockLabel}>DELAY!</div>
+                  <div className={`${styles.lockNum} terminal`}>
+                    {Math.ceil(state.lockedMs / 1000)}
+                  </div>
+                  <div className={styles.hint}>BUZZER LOCKED</div>
+                </motion.div>
+              )}
+              {alreadyWrong && !isLocked && (
+                <div className={styles.lockOverlay}>
+                  <div className={styles.lockLabel}>OUT</div>
+                  <div className={styles.hint}>YOU ALREADY ANSWERED</div>
                 </div>
               )}
-              {isOut && <div className={styles.outBadge}>OUT</div>}
-              <div className={styles.teamName}>
-                {team ? team.name : <span className={styles.empty}>EMPTY</span>}
-              </div>
-              <motion.div
-                className={styles.teamScore}
-                key={team?.score ?? 0}
-                animate={justWon ? { scale: [1, 1.4, 1] } : { scale: 1 }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-              >
-                {team ? team.score : 0}
-              </motion.div>
-              <AnimatePresence>
-                {justWon && (
-                  <motion.div
-                    key="plus"
-                    className={styles.plus500}
-                    initial={{ opacity: 0, y: 30, scale: 0.5 }}
-                    animate={{ opacity: 1, y: -120, scale: 1.4 }}
-                    exit={{ opacity: 0, y: -160 }}
-                    transition={{ duration: 1.4, ease: "easeOut" }}
-                    style={{ color: (state.lastJudgment?.pointsDelta ?? 0) >= 0 ? "var(--avocado)" : "var(--tomato)" }}
-                  >
-                    {(state.lastJudgment?.pointsDelta ?? 0) >= 0 ? "+" : ""}{state.lastJudgment?.pointsDelta ?? 0}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
+              {!disabled && (
+                <motion.div
+                  className={styles.buzzButton}
+                  style={{ borderColor: color, color }}
+                  animate={{
+                    boxShadow: [
+                      `0 6px 0 0 var(--ink)`,
+                      `0 10px 0 0 var(--ink)`,
+                      `0 6px 0 0 var(--ink)`,
+                    ],
+                  }}
+                  transition={{ duration: 1.2, repeat: Infinity }}
+                  onClick={() => send({ type: "buzz" })}
+                  whileHover={{ scale: 1.04 }}
+                  whileTap={{ scale: 0.94 }}
+                >
+                  <div className={styles.buzzSmall}>PRESS SPACE</div>
+                  <div className={styles.buzzBig}>BUZZ</div>
+                </motion.div>
+              )}
+            </div>
           );
-        })}
-      </div>
+        })()}
 
-      {/* ACTIVE MODIFIER BANNER */}
-      {activeMod && (state.phase === "question" || state.phase === "buzzed") && (
-        <motion.div
-          className={styles.modBanner}
-          initial={{ y: -40, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          style={{ borderColor: activeMod.color, color: activeMod.color }}
-        >
-          <span className={styles.modLabel}>{activeMod.label}</span>
-          <span className={styles.modDesc}>{activeMod.description}</span>
-        </motion.div>
-      )}
+        {state.phase === "buzzed" && (
+          <div className={styles.center}>
+            {isMyBuzz ? (
+              <motion.div
+                className={styles.submitted}
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 14 }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/marco/marco2.png" alt="" className={styles.submittedImg} />
+                <div className={styles.submittedText} style={{ color }}>SUBMITTED</div>
+              </motion.div>
+            ) : (
+              <div className={styles.subtitle}>
+                {state.teams.find((t) => t.id === state.buzzedTeamId)?.name} BUZZED
+              </div>
+            )}
+          </div>
+        )}
 
-      {/* CENTER */}
-      <div className={styles.center}>
-        {state.phase === "lobby" && (
-          <div className={styles.lobby}>
-            <h1 className={styles.title}>:: SPANISH BUZZER ::</h1>
-            <p className={styles.subtitle}>WAITING FOR TEAMS — {state.teams.length}/4 CONNECTED</p>
-            <button className="primary" onClick={() => send({ type: "start" })}>START GAME</button>
+        {state.phase === "timeout" && (
+          <div className={styles.center}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/marco/marco3.png" alt="" className={styles.submittedImg} />
+          </div>
+        )}
+
+        {state.phase === "reveal" && (
+          <div className={styles.center}>
+            <div className={styles.subtitle}>NEXT QUESTION...</div>
           </div>
         )}
 
         {state.phase === "tradeChoice" && (
-          <motion.div
-            className={styles.buzzed}
-            initial={{ scale: 0.4, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 300, damping: 18 }}
-          >
-            <div className={styles.buzzedLabel}>TRADE!</div>
-            <div className={styles.buzzedName}>
-              {state.teams.find((t) => t.id === state.buzzedTeamId)?.name}
-            </div>
-            <div className={styles.subtitle}>is choosing a team to swap scores with...</div>
-          </motion.div>
+          <div className={styles.center}>
+            {isMyBuzz ? (
+              <>
+                <div className={styles.subtitle}>PICK A TEAM TO SWAP SCORES WITH</div>
+                <div className={styles.hint}>(you have to — even if you lose points!)</div>
+                <div className={styles.tradeGrid}>
+                  {state.teams
+                    .filter((t) => t.id !== youAreTeamId)
+                    .map((t) => {
+                      const c = TEAM_COLORS[t.id];
+                      return (
+                        <button
+                          key={t.id}
+                          onClick={() => send({ type: "tradeChoice", targetTeamId: t.id })}
+                          style={{ borderColor: c, color: c }}
+                          className={styles.tradeBtn}
+                        >
+                          <div className={styles.tradeName}>{t.name}</div>
+                          <div className={styles.tradeScore}>{t.score}</div>
+                        </button>
+                      );
+                    })}
+                </div>
+              </>
+            ) : (
+              <div className={styles.subtitle}>
+                {state.teams.find((t) => t.id === state.buzzedTeamId)?.name} IS CHOOSING...
+              </div>
+            )}
+          </div>
         )}
 
         {state.phase === "wheel" && (
-          <Wheel
-            result={state.wheelResult}
-            onSpinRequest={() => send({ type: "spinWheel" })}
-            onSpinComplete={() => send({ type: "wheelDone" })}
-          />
+          <div className={styles.center}>
+            <div className={styles.subtitle}>WHEEL OF MARCO...</div>
+            <div className={styles.hint}>(watch the screen)</div>
+          </div>
         )}
 
-        {(state.phase === "question" || state.phase === "buzzed") && (
-          <>
-            <AnimatePresence mode="wait">
-              {state.phase === "question" && (
-                <motion.div
-                  key="q"
-                  className={styles.question}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.5 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  {state.question}
-                </motion.div>
-              )}
-
-              {state.phase === "buzzed" && (
-                <motion.div
-                  key="buzzed"
-                  className={styles.buzzed}
-                  initial={{ scale: 0.2, opacity: 0, rotate: -8 }}
-                  animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ type: "spring", stiffness: 500, damping: 18 }}
-                >
-                  <div className={styles.buzzedLabel}>BUZZED IN</div>
-                  <div className={styles.buzzedName}>
-                    {state.teams.find((t) => t.id === state.buzzedTeamId)?.name}
-                  </div>
-                  <div className={styles.judgeRow}>
-                    <button
-                      className="success"
-                      onClick={() => send({ type: "judge", correct: true })}
-                    >
-                      ✓ CORRECTO
-                    </button>
-                    <button
-                      className="danger"
-                      onClick={() => send({ type: "judge", correct: false })}
-                    >
-                      ✗ FALSO
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {state.phase === "question" && !hideTimer && (
-              <motion.div
-                key={Math.floor(state.timerMs / 100)}
-                className={`${styles.timer} terminal`}
-                animate={{ scale: [1, 1.12, 1] }}
-                transition={{ duration: 0.15 }}
-                style={{
-                  color: danger ? "var(--tomato)" : "var(--ink)",
-                  textShadow: danger ? "0 0 24px var(--tomato)" : "none",
-                }}
-              >
-                {seconds}
-              </motion.div>
-            )}
-            {state.phase === "question" && hideTimer && (
-              <div className={`${styles.timer} ${styles.timerHidden} terminal`}>--.--</div>
-            )}
-          </>
-        )}
-
-        {state.phase === "timeout" && (
-          <motion.div
-            className={styles.timeout}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 200, damping: 14 }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/marco/marco1.png" alt="" className={styles.loseImg} />
-            <button onClick={() => send({ type: "next" })}>NEXT QUESTION</button>
-          </motion.div>
-        )}
-
-        {state.phase === "reveal" && (
-          <motion.div
-            className={styles.reveal}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 250, damping: 16 }}
-          >
-            <h2 className={styles.goodText}>
-              {(() => {
-                if (!state.lastJudgment?.correct) return "ROUND OVER";
-                switch (state.lastJudgment?.modifier) {
-                  case "doble":   return "DOUBLE POINTS!";
-                  case "triple":  return "TRIPLE POINTS!";
-                  case "jackpot": return "JACKPOT!";
-                  case "trueque": return "TRADE COMPLETE!";
-                  case "regalo":  return "GIFT!";
-                  case "demora":  return "GOOD JOB!";
-                  case "mudo":    return "GOOD JOB!";
-                  default:        return "GOOD JOB";
-                }
-              })()}
-            </h2>
-            <button onClick={() => send({ type: "next" })}>NEXT QUESTION</button>
-          </motion.div>
-        )}
       </div>
-
-      {/* footer controls */}
-      <div className={styles.footer}>
-        <button className="warn" onClick={() => send({ type: "reset" })}>
-          RESET
-        </button>
-        <div className={styles.qCounter}>Q {state.questionsAnswered + 1}</div>
-      </div>
-
-      {/* Full-screen red nuclear flash overlay when timer ≤ 5s */}
-      {danger && !hideTimer && <div className={styles.nukeFlash} />}
     </div>
   );
 }
