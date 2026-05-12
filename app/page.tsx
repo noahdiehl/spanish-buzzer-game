@@ -6,6 +6,7 @@ import { Flappy } from "./Flappy";
 import { DrawCanvas } from "./DrawCanvas";
 import { Banana } from "./Banana";
 import { Geom } from "./Geom";
+import { Felix } from "./Felix";
 import styles from "./play.module.css";
 
 const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
@@ -53,12 +54,30 @@ export default function PlayPage() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.code !== "Space" || youAreTeamId === null) return;
-      // Minigame: spacebar = flap (flappy) or jump (geom)
-      if (state?.phase === "minigame" && state.minigame?.status === "playing") {
-        e.preventDefault();
-        if (state.minigame.kind === "flappy") send({ type: "flap" });
-        else if (state.minigame.kind === "geom") send({ type: "jump" });
-        return;
+      // Minigame: spacebar = flap (flappy) or jump (geom) or shoot/buzz (felix)
+      if (state?.phase === "minigame" && state.minigame) {
+        const k = state.minigame.kind;
+        const s = state.minigame.status;
+        if (k === "flappy" && s === "playing") {
+          e.preventDefault();
+          send({ type: "flap" });
+          return;
+        }
+        if (k === "geom" && s === "playing") {
+          e.preventDefault();
+          send({ type: "jump" });
+          return;
+        }
+        if (k === "felix" && (s === "shoot1" || s === "shoot2")) {
+          e.preventDefault();
+          send({ type: "shoot" });
+          return;
+        }
+        if (k === "felix" && s === "questionPlay") {
+          e.preventDefault();
+          send({ type: "buzz" });
+          return;
+        }
       }
       // Regular question: spacebar = buzz (with locks)
       if (state?.phase !== "question") return;
@@ -128,6 +147,92 @@ export default function PlayPage() {
         {state.phase === "minigame" && state.minigame?.kind === "banana" && (
           <Banana mg={state.minigame} teams={state.teams} size="player" />
         )}
+
+        {state.phase === "minigame" && state.minigame?.kind === "felix" && (() => {
+          const mg = state.minigame!;
+          const isShoot = mg.status === "shoot1" || mg.status === "shoot2";
+          const isPlay = mg.status === "questionPlay";
+          const buzzedWrong = mg.felixBuzzedWrong?.includes(youAreTeamId!) ?? false;
+          return (
+            <>
+              <Felix mg={mg} teams={state.teams} isHost={false} />
+              {(isShoot || isPlay) && (
+                <div
+                  style={{
+                    position: "fixed",
+                    bottom: 24,
+                    left: 0,
+                    right: 0,
+                    display: "flex",
+                    justifyContent: "center",
+                    zIndex: 60000,
+                    pointerEvents: "none",
+                  }}
+                >
+                  {isShoot && (
+                    <motion.button
+                      onClick={() => send({ type: "shoot" })}
+                      whileTap={{ scale: 0.92 }}
+                      style={{
+                        pointerEvents: "auto",
+                        background: "#ff2a4a",
+                        color: "#fff",
+                        border: "4px solid #2e2418",
+                        borderRadius: 18,
+                        padding: "22px 48px",
+                        fontFamily: "Press Start 2P, monospace",
+                        fontSize: "1.4rem",
+                        letterSpacing: 4,
+                        boxShadow: "0 8px 0 0 #2e2418, 0 0 30px #ff2a4a",
+                        cursor: "pointer",
+                      }}
+                    >
+                      SHOOT
+                    </motion.button>
+                  )}
+                  {isPlay && !buzzedWrong && (
+                    <motion.button
+                      onClick={() => send({ type: "buzz" })}
+                      whileTap={{ scale: 0.92 }}
+                      style={{
+                        pointerEvents: "auto",
+                        background: "#fff700",
+                        color: "#2e2418",
+                        border: "4px solid #2e2418",
+                        borderRadius: 18,
+                        padding: "22px 48px",
+                        fontFamily: "Press Start 2P, monospace",
+                        fontSize: "1.4rem",
+                        letterSpacing: 4,
+                        boxShadow: "0 8px 0 0 #2e2418, 0 0 30px #fff700",
+                        cursor: "pointer",
+                      }}
+                    >
+                      BUZZ
+                    </motion.button>
+                  )}
+                  {isPlay && buzzedWrong && (
+                    <div
+                      style={{
+                        pointerEvents: "none",
+                        background: "#2e2418",
+                        color: "#ff2a4a",
+                        border: "3px solid #ff2a4a",
+                        borderRadius: 14,
+                        padding: "14px 28px",
+                        fontFamily: "Press Start 2P, monospace",
+                        fontSize: "0.9rem",
+                        letterSpacing: 3,
+                      }}
+                    >
+                      LOCKED OUT — FELIX SAID NO
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {state.phase === "minigame" && state.minigame?.kind === "geom" && (() => {
           const mg = state.minigame!;
@@ -352,9 +457,12 @@ export default function PlayPage() {
 
         {state.phase === "reveal" && (() => {
           const j = state.lastJudgment;
+          const isBananaLoss = j && !j.correct && (j.pointsDelta ?? 0) < 0;
+          const iWasHit = isBananaLoss && j.teamId === youAreTeamId;
           const iWon = j?.correct && j.teamId === youAreTeamId;
-          const winnerName = j ? state.teams.find((t) => t.id === j.teamId)?.name : null;
+          const subjectName = j ? state.teams.find((t) => t.id === j.teamId)?.name : null;
           const headline = (() => {
+            if (isBananaLoss) return "BANANA TAX!";
             if (!j?.correct) return "NOBODY GOT IT";
             switch (j.modifier) {
               case "doble":   return "DOUBLE POINTS!";
@@ -364,7 +472,7 @@ export default function PlayPage() {
               default:        return "CORRECT!";
             }
           })();
-          const headlineColor = j?.correct ? "var(--avocado)" : "var(--tomato)";
+          const headlineColor = (j?.correct ? "var(--avocado)" : "var(--tomato)");
           return (
             <motion.div
               className={styles.center}
@@ -375,16 +483,22 @@ export default function PlayPage() {
               <div className={styles.revealHeadline} style={{ color: headlineColor }}>
                 {headline}
               </div>
-              {j?.correct && (
+              {(j?.correct || isBananaLoss) && (
                 <>
                   <div className={styles.revealWho}>
-                    {iWon ? "YOU WON!" : `${winnerName} WON`}
+                    {iWon
+                      ? "YOU WON!"
+                      : iWasHit
+                      ? "YOU GOT HIT!"
+                      : isBananaLoss
+                      ? `${subjectName} GOT HIT`
+                      : `${subjectName} WON`}
                   </div>
                   <div
                     className={styles.revealPoints}
-                    style={{ color: (j.pointsDelta ?? 0) >= 0 ? "var(--avocado)" : "var(--tomato)" }}
+                    style={{ color: (j!.pointsDelta ?? 0) >= 0 ? "var(--avocado)" : "var(--tomato)" }}
                   >
-                    {(j.pointsDelta ?? 0) >= 0 ? "+" : ""}{j.pointsDelta} pts
+                    {(j!.pointsDelta ?? 0) >= 0 ? "+" : ""}{j!.pointsDelta.toLocaleString()} pts
                   </div>
                 </>
               )}

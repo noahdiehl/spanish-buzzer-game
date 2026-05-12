@@ -28,9 +28,10 @@ const FLAPPY_MAX_MS = 60000;
 const FLAPPY_GRAVITY = 1.6;       // per second
 const FLAPPY_JUMP_VY = -0.6;
 const FLAPPY_PIPE_SPEED = 0.22;   // per second
-const FLAPPY_PIPE_GAP = 0.32;
-const FLAPPY_PIPE_INTERVAL_MS = 1100;
+const FLAPPY_PIPE_GAP = 0.38;
+const FLAPPY_PIPE_INTERVAL_MS = 1300;
 const FLAPPY_FIRST_PIPE_DELAY_MS = 900;
+const FLAPPY_MAX_GAP_DELTA = 0.22; // max change in gap-Y between consecutive pipes
 const FLAPPY_BIRD_X = 0.3;
 const FLAPPY_BIRD_RADIUS = 0.04;
 const FLAPPY_PIPE_WIDTH = 0.09;
@@ -39,7 +40,26 @@ const DRAW_STUDY_MS = 5000;
 const DRAW_DRAWING_MS = 20000;
 const DRAW_WINNER_POINTS = 10000;
 
-const MINIGAME_CYCLE: ("flappy" | "draw" | "banana" | "geom")[] = ["flappy", "draw", "banana", "geom"];
+const MINIGAME_CYCLE: ("flappy" | "draw" | "banana" | "geom" | "felix")[] = [
+  "flappy", "draw", "banana", "geom", "felix",
+];
+
+// === DESTROY FELIX constants ===
+const FELIX_TICK_MS = 33;
+const FELIX_INTRO_MS = 1500;
+const FELIX_SHOOT1_MS = 9000;
+const FELIX_QUESTION_THROW_MS = 1800;
+const FELIX_QUESTION_COUNTDOWN_MS = 3000;
+const FELIX_QUESTION_MAX_MS = 15000;
+const FELIX_SHOOT2_MS = 3500;
+const FELIX_DEATH_MS = 2600;
+const FELIX_OVER_MS = 800;
+const FELIX_HP_MAX = 100;
+const FELIX_HP_FLOOR_SHOOT1 = 28;   // can't drop below this during shoot1
+const FELIX_SHOT_COOLDOWN_MS = 140; // per-player rate limit (~7 shots/sec)
+const FELIX_SHOT_DAMAGE = 1;
+const FELIX_FLASH_MS = 130;
+const FELIX_CORRECT_BONUS = 10000;
 
 // === GEOMETRY DASH constants ===
 const GEOM_TICK_MS = 33;
@@ -74,6 +94,7 @@ interface ClientInfo {
   ws: WebSocket;
   teamId: number | null;
   token: string | null;
+  lastShotAt?: number;
 }
 
 const clients = new Set<ClientInfo>();
@@ -190,6 +211,7 @@ function _enterQuestionAfterCountdown() {
 
 let pipeIdCounter = 0;
 let flappyPipeTimer = 0;
+let flappyLastGapY = 0.5;
 
 function startMinigame() {
   stopTimer();
@@ -208,7 +230,8 @@ function startMinigame() {
   if (kind === "flappy") startFlappy();
   else if (kind === "draw") startDraw();
   else if (kind === "banana") startBanana();
-  else startGeom();
+  else if (kind === "geom") startGeom();
+  else startFelix();
 }
 
 function startFlappy() {
@@ -230,10 +253,17 @@ function startFlappy() {
     bananaDeduction: 0,
     cubes: [],
     obstacles: [],
+    felixHp: FELIX_HP_MAX,
+    felixHpMax: FELIX_HP_MAX,
+    felixFlashUntilMs: 0,
+    felixShotsTotal: 0,
+    felixQuestion: null,
+    felixBuzzedWrong: [],
   };
   state.minigame = mg;
   flappyPipeTimer = FLAPPY_PIPE_INTERVAL_MS - FLAPPY_FIRST_PIPE_DELAY_MS;
   pipeIdCounter = 0;
+  flappyLastGapY = 0.5;
 
   tickInterval = setInterval(() => {
     minigameTick();
@@ -254,6 +284,12 @@ function startDraw() {
     bananaDeduction: 0,
     cubes: [],
     obstacles: [],
+    felixHp: FELIX_HP_MAX,
+    felixHpMax: FELIX_HP_MAX,
+    felixFlashUntilMs: 0,
+    felixShotsTotal: 0,
+    felixQuestion: null,
+    felixBuzzedWrong: [],
   };
   state.minigame = mg;
 
@@ -291,6 +327,12 @@ function startGeom() {
       rotation: 0,
     })),
     obstacles: [],
+    felixHp: FELIX_HP_MAX,
+    felixHpMax: FELIX_HP_MAX,
+    felixFlashUntilMs: 0,
+    felixShotsTotal: 0,
+    felixQuestion: null,
+    felixBuzzedWrong: [],
   };
   state.minigame = mg;
   geomObstacleId = 0;
@@ -514,6 +556,106 @@ function endGeom() {
   }, 5000);
 }
 
+// ============================================================
+//  DESTROY FELIX MINIGAME
+// ============================================================
+
+function startFelix() {
+  stopTimer();
+  state.phase = "minigame";
+  state.question = null;
+  state.buzzedTeamId = null;
+  state.modifier = null;
+  state.wheelResult = null;
+  state.answeredWrong = [];
+  state.lockedTeamId = null;
+  state.lockedMs = 0;
+
+  const mg: MinigameState = {
+    kind: "felix",
+    status: "intro",
+    countdownMs: FELIX_INTRO_MS,
+    elapsedMs: 0,
+    birds: [],
+    pipes: [],
+    drawings: {},
+    bananaVictimId: null,
+    bananaDeduction: 0,
+    cubes: [],
+    obstacles: [],
+    felixHp: FELIX_HP_MAX,
+    felixHpMax: FELIX_HP_MAX,
+    felixFlashUntilMs: 0,
+    felixShotsTotal: 0,
+    felixQuestion: null,
+    felixBuzzedWrong: [],
+  };
+  state.minigame = mg;
+
+  tickInterval = setInterval(() => {
+    felixTick();
+    broadcast();
+  }, FELIX_TICK_MS);
+}
+
+function felixTick() {
+  const mg = state.minigame;
+  if (!mg || mg.kind !== "felix") return;
+  mg.elapsedMs += FELIX_TICK_MS;
+  mg.countdownMs -= FELIX_TICK_MS;
+  if (mg.countdownMs > 0) return;
+
+  // Phase transition
+  switch (mg.status) {
+    case "intro":
+      mg.status = "shoot1";
+      mg.countdownMs = FELIX_SHOOT1_MS;
+      break;
+    case "shoot1":
+      mg.status = "questionThrow";
+      mg.countdownMs = FELIX_QUESTION_THROW_MS;
+      mg.felixQuestion = QUESTIONS[state.questionIdx] ?? "(no question)";
+      break;
+    case "questionThrow":
+      mg.status = "questionCountdown";
+      mg.countdownMs = FELIX_QUESTION_COUNTDOWN_MS;
+      break;
+    case "questionCountdown":
+      mg.status = "questionPlay";
+      mg.countdownMs = FELIX_QUESTION_MAX_MS;
+      state.buzzedTeamId = null;
+      state.answeredWrong = [];
+      break;
+    case "questionPlay":
+      // Time ran out without a buzz — move on to final shoot.
+      mg.status = "shoot2";
+      mg.countdownMs = FELIX_SHOOT2_MS;
+      break;
+    case "questionBuzzed":
+      // Teacher hasn't judged in time — treat as a wrong skip and move on.
+      mg.status = "shoot2";
+      mg.countdownMs = FELIX_SHOOT2_MS;
+      state.buzzedTeamId = null;
+      break;
+    case "shoot2":
+      mg.status = "death";
+      mg.countdownMs = FELIX_DEATH_MS;
+      mg.felixHp = 0;
+      break;
+    case "death":
+      mg.status = "felixOver";
+      mg.countdownMs = FELIX_OVER_MS;
+      break;
+    case "felixOver":
+      // This is the LAST minigame. End the game.
+      stopTimer();
+      state.minigame = null;
+      state.phase = "ended";
+      state.lastJudgment = null;
+      break;
+  }
+}
+
 function startBanana() {
   // Pick a victim upfront — the roulette animates and lands on this team.
   const victim = state.teams.length > 0
@@ -576,13 +718,22 @@ function bananaTick() {
       mg.countdownMs = BANANA_EXIT_MS;
       break;
     case "exit":
-      // Done — advance straight to next question (no winner reveal for banana)
+      // Done — go through reveal so the team boxes slide back in and the
+      // victim's box gets the negative -deduction animation.
       stopTimer();
+      if (mg.bananaVictimId !== null) {
+        state.lastJudgment = {
+          teamId: mg.bananaVictimId,
+          correct: false,
+          pointsDelta: -mg.bananaDeduction,
+          modifier: null,
+        };
+      } else {
+        state.lastJudgment = null;
+      }
       state.minigame = null;
       state.bypassNextRoundCheck = true;
       state.phase = "reveal";
-      state.lastJudgment = null;
-      // The host auto-advance fires `next`, which will use the bypass flag.
       break;
   }
 }
@@ -648,10 +799,15 @@ function minigameTick() {
   flappyPipeTimer += FLAPPY_TICK_MS;
   if (flappyPipeTimer >= FLAPPY_PIPE_INTERVAL_MS) {
     flappyPipeTimer = 0;
+    // Constrain new gap-Y so consecutive pipes are reachable
+    const lo = Math.max(0.22, flappyLastGapY - FLAPPY_MAX_GAP_DELTA);
+    const hi = Math.min(0.78, flappyLastGapY + FLAPPY_MAX_GAP_DELTA);
+    const newGapY = lo + Math.random() * (hi - lo);
+    flappyLastGapY = newGapY;
     mg.pipes.push({
       id: pipeIdCounter++,
       x: 1.15,
-      gapY: 0.25 + Math.random() * 0.5,
+      gapY: newGapY,
     });
   }
 
@@ -840,6 +996,23 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       if (bird && bird.alive) bird.vy = FLAPPY_JUMP_VY;
       return;
     }
+    case "shoot": {
+      if (state.phase !== "minigame" || !state.minigame) return;
+      if (state.minigame.kind !== "felix") return;
+      const status = state.minigame.status;
+      if (status !== "shoot1" && status !== "shoot2") return;
+      if (client.teamId === null) return;
+      // Rate limit per player
+      const now = Date.now();
+      if (client.lastShotAt && now - client.lastShotAt < FELIX_SHOT_COOLDOWN_MS) return;
+      client.lastShotAt = now;
+      // Apply damage (with floor during shoot1)
+      const floor = status === "shoot1" ? FELIX_HP_FLOOR_SHOOT1 : 0;
+      state.minigame.felixHp = Math.max(floor, state.minigame.felixHp - FELIX_SHOT_DAMAGE);
+      state.minigame.felixFlashUntilMs = state.minigame.elapsedMs + FELIX_FLASH_MS;
+      state.minigame.felixShotsTotal += 1;
+      return;
+    }
     case "jump": {
       if (state.phase !== "minigame" || !state.minigame) return;
       if (state.minigame.kind !== "geom") return;
@@ -934,16 +1107,28 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       return;
     }
     case "buzz": {
-      if (state.phase !== "question") return;
       if (client.teamId === null) return;
-      // Already answered wrong this round — locked out
-      if (state.answeredWrong.includes(client.teamId)) return;
-      // DELAY lockout still active
-      if (state.lockedTeamId === client.teamId && state.lockedMs > 0) return;
-      state.phase = "buzzed";
-      state.buzzedTeamId = client.teamId;
-      stopTimer();
-      broadcast();
+      // Standard buzz during a regular question
+      if (state.phase === "question") {
+        if (state.answeredWrong.includes(client.teamId)) return;
+        if (state.lockedTeamId === client.teamId && state.lockedMs > 0) return;
+        state.phase = "buzzed";
+        state.buzzedTeamId = client.teamId;
+        stopTimer();
+        broadcast();
+        return;
+      }
+      // Felix boss-fight question buzz
+      if (
+        state.phase === "minigame" &&
+        state.minigame?.kind === "felix" &&
+        state.minigame.status === "questionPlay"
+      ) {
+        if (state.minigame.felixBuzzedWrong.includes(client.teamId)) return;
+        state.minigame.status = "questionBuzzed";
+        state.buzzedTeamId = client.teamId;
+        return;
+      }
       return;
     }
     case "start": {
@@ -954,6 +1139,42 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       return;
     }
     case "judge": {
+      // Felix boss fight judging
+      if (
+        state.phase === "minigame" &&
+        state.minigame?.kind === "felix" &&
+        state.minigame.status === "questionBuzzed" &&
+        state.buzzedTeamId !== null
+      ) {
+        const mg = state.minigame;
+        const winnerId = state.buzzedTeamId;
+        const team = state.teams.find((t) => t.id === winnerId);
+        if (msg.correct && team) {
+          // CORRECT — award + skip straight to finishing him off
+          team.score += FELIX_CORRECT_BONUS;
+          state.lastWinnerTeamId = winnerId;
+          mg.status = "shoot2";
+          mg.countdownMs = FELIX_SHOOT2_MS;
+          state.buzzedTeamId = null;
+          broadcast();
+          return;
+        }
+        // WRONG — Felix yells NO. Lock this team out; if room for more buzzes, return to play.
+        mg.felixBuzzedWrong.push(winnerId);
+        const remaining = state.teams.length - mg.felixBuzzedWrong.length;
+        state.buzzedTeamId = null;
+        if (remaining <= 0) {
+          // Everyone got it wrong — final shoot phase
+          mg.status = "shoot2";
+          mg.countdownMs = FELIX_SHOOT2_MS;
+        } else {
+          mg.status = "questionPlay";
+          // Don't reset countdown — keep the remaining time from when buzz happened
+        }
+        broadcast();
+        return;
+      }
+
       if (state.phase !== "buzzed" || state.buzzedTeamId === null) return;
       const winnerId = state.buzzedTeamId;
       const team = state.teams.find((t) => t.id === winnerId);
@@ -1038,9 +1259,10 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       return;
     }
     case "next": {
+      // Guard: only valid from reveal or timeout. Otherwise this is a stale/double
+      // message (e.g. host auto-advance + manual click) and would chain minigames.
+      if (state.phase !== "reveal" && state.phase !== "timeout") return;
       if (state.bypassNextRoundCheck) {
-        // After minigame win or wheel-triggered trade — just start the next
-        // question at the already-advanced questionIdx, no further wheel/minigame check.
         state.bypassNextRoundCheck = false;
         state.lastJudgment = null;
         state.answeredWrong = [];

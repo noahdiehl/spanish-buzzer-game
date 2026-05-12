@@ -82,8 +82,8 @@ export function Banana({ mg, teams, size, onTypeBlip }: Props) {
   // Enter slide-up animation: banana starts off-screen and rises during "enter"
   const isVisible = mg.status !== "exit";
   // Banana size scales with host vs player
-  const bananaImgSize = isHost ? 220 : 110;
-  const dialogFont = isHost ? 2.0 : 1.0; // rem
+  const bananaImgSize = isHost ? 200 : 110;
+  const dialogFont = isHost ? 2.4 : 1.0; // rem
 
   return (
     <div
@@ -106,22 +106,23 @@ export function Banana({ mg, teams, size, onTypeBlip }: Props) {
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25 }}
+          transition={{ duration: 0.2 }}
           style={{
-            background: "var(--panel)",
-            border: "5px solid var(--ink)",
-            borderRadius: 18,
-            padding: isHost ? "32px 48px" : "14px 18px",
-            boxShadow: "0 10px 0 0 var(--ink)",
-            maxWidth: isHost ? "84vw" : "92vw",
-            minWidth: isHost ? 720 : 280,
+            background: "#fffaea",
+            border: "6px solid #2e2418",
+            borderRadius: 22,
+            padding: isHost ? "38px 56px" : "14px 18px",
+            boxShadow: "0 12px 0 0 #2e2418, 0 0 60px rgba(255, 230, 100, 0.4)",
+            maxWidth: isHost ? "min(88vw, 1200px)" : "92vw",
+            minWidth: isHost ? "min(720px, 80vw)" : 280,
             fontFamily: "'Press Start 2P', monospace",
             fontSize: `${dialogFont}rem`,
-            lineHeight: 1.5,
-            color: "var(--ink)",
-            textShadow: "3px 3px 0 var(--amber)",
+            lineHeight: 1.6,
+            color: "#2e2418",
             letterSpacing: 2,
             textAlign: isHost ? "center" : "left",
+            position: "relative",
+            zIndex: 2,
           }}
         >
           {dialog1Active && (

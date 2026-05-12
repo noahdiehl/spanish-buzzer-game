@@ -8,6 +8,7 @@ import { Wheel } from "./Wheel";
 import { Flappy } from "../Flappy";
 import { Banana } from "../Banana";
 import { Geom } from "../Geom";
+import { Felix } from "../Felix";
 
 // warm muted team palette: coral, teal, mustard, plum
 const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
@@ -25,7 +26,21 @@ export default function MainBoard() {
   const lastBuzzedRef = useRef<number | null>(null);
   const flappyMusicRef = useRef<HTMLAudioElement | null>(null);
   const bananaMusicRef = useRef<HTMLAudioElement | null>(null);
+  const felixMusicRef = useRef<HTMLAudioElement | null>(null);
   const blipCtxRef = useRef<AudioContext | null>(null);
+  const prevFelixShotsRef = useRef(0);
+  const prevFelixStatusRef = useRef<string | null>(null);
+  const wheelLastSegRef = useRef<number>(-1);
+  const wheelRafRef = useRef<number>(0);
+
+  // Play one-shot SFX (overlapping allowed)
+  function playSfx(src: string, volume = 0.85) {
+    try {
+      const a = new Audio(src);
+      a.volume = volume;
+      a.play().catch(() => {});
+    } catch {}
+  }
 
   // Auto-advance the reveal screen after 1.5s so the host doesn't have to click NEXT every round.
   useEffect(() => {
@@ -49,6 +64,99 @@ export default function MainBoard() {
       lastBuzzedRef.current = null;
     }
   }, [state?.phase, state?.buzzedTeamId]);
+
+  // ===== FELIX BOSS AUDIO =====
+  // Battle music loops during all felix phases
+  useEffect(() => {
+    const audio = felixMusicRef.current;
+    if (!audio) return;
+    audio.loop = true;
+    const inFelix =
+      state?.phase === "minigame" &&
+      state.minigame?.kind === "felix" &&
+      state.minigame.status !== "felixOver";
+    if (inFelix) {
+      audio.volume = 0.45;
+      if (audio.paused) {
+        audio.currentTime = 0;
+        audio.play().catch(() => {});
+      }
+    } else {
+      if (!audio.paused) audio.pause();
+      audio.currentTime = 0;
+    }
+  }, [state?.phase, state?.minigame?.kind, state?.minigame?.status]);
+
+  // Felix status-triggered voice lines + sounds
+  useEffect(() => {
+    const status = state?.minigame?.kind === "felix" ? state.minigame.status : null;
+    const prev = prevFelixStatusRef.current;
+    prevFelixStatusRef.current = status ?? null;
+    if (status === prev) return;
+    if (status === "intro") {
+      playSfx("/sounds/felix_iam.mp3", 1);
+      setTimeout(() => playSfx("/sounds/felix_laugh.mp3", 1), 1300);
+    } else if (status === "questionThrow") {
+      playSfx("/sounds/slap.mp3", 1);
+    } else if (status === "questionCountdown") {
+      // Epic countdown — play 3 times, one per second
+      playSfx("/sounds/epic_countdown.mp3", 1);
+      setTimeout(() => playSfx("/sounds/epic_countdown.mp3", 1), 1000);
+      setTimeout(() => playSfx("/sounds/epic_countdown.mp3", 1), 2000);
+    } else if (status === "shoot2") {
+      // Decide based on the prior phase + how many were wrong.
+      if (prev === "questionPlay" || prev === "questionBuzzed") {
+        const mg = state?.minigame;
+        if (mg && mg.kind === "felix") {
+          const allWrong = (mg.felixBuzzedWrong?.length ?? 0) >= state.teams.length;
+          if (allWrong) playSfx("/sounds/felix_noonewins.mp3", 1);
+          else playSfx("/sounds/felix_laugh.mp3", 1);
+        }
+      } else {
+        playSfx("/sounds/felix_stop.mp3", 1);
+      }
+    } else if (status === "death") {
+      playSfx("/sounds/felix_dies.mp3", 1);
+    }
+  }, [state?.minigame?.status, state?.minigame?.kind, state?.minigame, state?.teams]);
+
+  // Random voice lines during shoot phases
+  useEffect(() => {
+    const status = state?.minigame?.kind === "felix" ? state.minigame.status : null;
+    if (status !== "shoot1" && status !== "shoot2") return;
+    const lines = status === "shoot1"
+      ? ["/sounds/felix_iam.mp3", "/sounds/felix_dontlike.mp3", "/sounds/felix_laugh.mp3", "/sounds/felix_laugh.mp3"]
+      : ["/sounds/felix_stop.mp3", "/sounds/felix_actuallystop.mp3", "/sounds/felix_laugh.mp3"];
+    const id = setInterval(() => {
+      const pick = lines[Math.floor(Math.random() * lines.length)];
+      playSfx(pick, 0.95);
+    }, 3200);
+    return () => clearInterval(id);
+  }, [state?.minigame?.status, state?.minigame?.kind]);
+
+  // Late-shoot1 transition warnings: when HP gets low, switch random pool to "stop"
+  useEffect(() => {
+    const mg = state?.minigame;
+    if (!mg || mg.kind !== "felix") return;
+    if (mg.status !== "shoot1") return;
+    // When HP first hits the floor, play "stop shooting"
+    if (mg.felixHp <= 30) {
+      // Throttle this — only every ~3s while at floor
+      // (handled by status change useEffect when transition happens)
+    }
+  }, [state?.minigame]);
+
+  // Laser sound on each new shot
+  useEffect(() => {
+    const total = state?.minigame?.felixShotsTotal ?? 0;
+    if (total > prevFelixShotsRef.current) {
+      const burst = Math.min(3, total - prevFelixShotsRef.current);
+      for (let i = 0; i < burst; i++) {
+        setTimeout(() => playSfx("/sounds/laser.mp3", 0.6), i * 30);
+      }
+    }
+    prevFelixShotsRef.current = total;
+  }, [state?.minigame?.felixShotsTotal]);
 
   // Banana music — plays during the banana event.
   useEffect(() => {
@@ -194,8 +302,9 @@ export default function MainBoard() {
           const isBuzzed = state.buzzedTeamId === i;
           const justWon =
             state.phase === "reveal" &&
-            state.lastJudgment?.correct &&
-            state.lastJudgment.teamId === i;
+            state.lastJudgment != null &&
+            state.lastJudgment.teamId === i &&
+            (state.lastJudgment.pointsDelta ?? 0) !== 0;
           const isOut = state.answeredWrong.includes(i);
           const isLocked = state.lockedTeamId === i && state.lockedMs > 0;
           return (
@@ -691,6 +800,9 @@ export default function MainBoard() {
           >
             <h2 className={styles.goodText}>
               {(() => {
+                if (state.lastJudgment && !state.lastJudgment.correct && (state.lastJudgment.pointsDelta ?? 0) < 0) {
+                  return "BANANA TAX!";
+                }
                 if (!state.lastJudgment?.correct) return "ROUND OVER";
                 switch (state.lastJudgment?.modifier) {
                   case "doble":   return "DOUBLE POINTS!";
@@ -725,10 +837,25 @@ export default function MainBoard() {
       <audio ref={flappyMusicRef} src="/sounds/nostalgic.mp3" preload="auto" />
       {/* Banana event music */}
       <audio ref={bananaMusicRef} src="/sounds/banana.mp3" preload="auto" />
+      {/* Felix boss music */}
+      <audio ref={felixMusicRef} src="/sounds/felix_music.mp3" preload="auto" />
 
       {/* Banana event overlay */}
       {state.phase === "minigame" && state.minigame?.kind === "banana" && (
         <Banana mg={state.minigame} teams={state.teams} size="host" onTypeBlip={playBlip} />
+      )}
+
+      {/* Felix boss overlay */}
+      {state.phase === "minigame" && state.minigame?.kind === "felix" && (
+        <Felix
+          mg={state.minigame}
+          teams={state.teams}
+          isHost
+          onJudge={(correct) => {
+            if (!correct) playSfx("/sounds/felix_laugh.mp3", 1);
+            send({ type: "judge", correct });
+          }}
+        />
       )}
     </div>
   );

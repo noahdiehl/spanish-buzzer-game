@@ -4,6 +4,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { MODIFIERS, type ModifierKey } from "@/lib/types";
 import styles from "./wheel.module.css";
 
+function playTick() {
+  try {
+    const a = new Audio("/sounds/tick.mp3");
+    a.volume = 0.55;
+    a.play().catch(() => {});
+  } catch {}
+}
+
 interface Props {
   result: ModifierKey | null;        // null until server has picked
   onSpinRequest: () => void;          // ask server to pick
@@ -21,6 +29,42 @@ export function Wheel({ result, onSpinRequest, onSpinComplete, canSpinHere = fal
   const [phase, setPhase] = useState<"idle" | "spinning" | "landed">("idle");
   const [showResult, setShowResult] = useState(false);
   const requested = useRef(false);
+  const wheelDomRef = useRef<HTMLDivElement | null>(null);
+  const lastSegRef = useRef<number>(-1);
+
+  // While spinning, poll the wheel's actual rotation each frame and play a tick
+  // sound when it crosses a new segment.
+  useEffect(() => {
+    if (phase !== "spinning") {
+      lastSegRef.current = -1;
+      return;
+    }
+    let raf = 0;
+    function frame() {
+      const el = wheelDomRef.current;
+      if (el) {
+        const m = window.getComputedStyle(el).transform;
+        let angle = 0;
+        if (m && m !== "none") {
+          const match = m.match(/matrix\(([^)]+)\)/);
+          if (match) {
+            const parts = match[1].split(",").map(parseFloat);
+            const a = parts[0], b = parts[1];
+            angle = (Math.atan2(b, a) * 180) / Math.PI;
+          }
+        }
+        const normalized = ((angle % 360) + 360) % 360;
+        const seg = Math.floor(normalized / SEG_DEG);
+        if (seg !== lastSegRef.current) {
+          if (lastSegRef.current !== -1) playTick();
+          lastSegRef.current = seg;
+        }
+      }
+      raf = requestAnimationFrame(frame);
+    }
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [phase]);
 
   // When user clicks SPIN, ask server for result.
   function handleSpinClick() {
@@ -63,6 +107,7 @@ export function Wheel({ result, onSpinRequest, onSpinComplete, canSpinHere = fal
       <div className={styles.wheelStage} style={{ display: showResult ? "none" : undefined }}>
         <div className={styles.pointer}>▼</div>
         <motion.div
+          ref={wheelDomRef}
           className={styles.wheel}
           animate={{ rotate: rotation }}
           transition={{ duration: 4, ease: [0.17, 0.67, 0.13, 1.0] }}

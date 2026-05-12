@@ -17,7 +17,7 @@ interface Props {
 
 export function Flappy({ mg, teams, highlightTeamId, height, width }: Props) {
   const PIPE_W = 0.09 * width;
-  const PIPE_GAP = 0.32 * height;
+  const PIPE_GAP = 0.38 * height;
   const BIRD_R = 0.04 * Math.min(width, height);
 
   return (
@@ -47,8 +47,8 @@ export function Flappy({ mg, teams, highlightTeamId, height, width }: Props) {
       {/* Pipes */}
       {mg.pipes.map((p) => {
         const x = p.x * width;
-        const gapTop = (p.gapY - 0.32 / 2) * height;
-        const gapBot = (p.gapY + 0.32 / 2) * height;
+        const gapTop = (p.gapY - 0.38 / 2) * height;
+        const gapBot = (p.gapY + 0.38 / 2) * height;
         return (
           <div key={p.id}>
             <div

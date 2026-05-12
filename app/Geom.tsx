@@ -297,15 +297,15 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
             )}
 
             {c.alive && (
-              <motion.div
-                animate={{ rotate: c.rotation }}
-                transition={{ type: "tween", duration: 0.05 }}
+              <div
                 style={{
                   position: "absolute",
                   left: cubeLeft,
                   top: cubeTop,
                   width: cubeWPx,
                   height: cubeHPx,
+                  transform: `rotate(${c.rotation}deg)`,
+                  transformOrigin: "center",
                   filter: `hue-rotate(${hue}deg)${highlight ? " drop-shadow(0 0 12px rgba(255,255,255,0.9))" : ""}`,
                   border: highlight
                     ? "4px solid rgba(255,255,255,0.85)"
@@ -316,6 +316,7 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                   boxShadow: highlight
                     ? `0 0 22px ${color}`
                     : `3px 4px 0 #2e2418`,
+                  willChange: "transform",
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -326,39 +327,37 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                     width: "100%",
                     height: "100%",
                     objectFit: "cover",
+                    pointerEvents: "none",
                   }}
                 />
-              </motion.div>
+              </div>
             )}
 
             <AnimatePresence>
               {!c.alive && (
-                <motion.div
+                <motion.img
                   key={`boom-${c.teamId}`}
+                  src="/marco/marco3.png"
+                  alt=""
                   style={{
                     position: "absolute",
-                    left: cubeLeft - cubeWPx * 0.4,
-                    top: cubeTop - cubeHPx * 0.2,
-                    width: cubeWPx * 1.8,
-                    height: cubeHPx * 1.8,
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: Math.min(cubeWPx, cubeHPx) * 1.6,
-                    color,
+                    left: cubeLeft - cubeWPx * 0.6,
+                    top: cubeTop - cubeHPx * 0.5,
+                    width: cubeWPx * 2.2,
+                    height: cubeHPx * 2.2,
+                    objectFit: "contain",
                     pointerEvents: "none",
+                    filter: `drop-shadow(0 0 14px ${color})`,
                   }}
                   initial={{ scale: 0, opacity: 0, rotate: 0 }}
                   animate={{
-                    scale: [0, 2, 1.4, 1.6, 1.3],
-                    rotate: [0, 90, -60, 30, 0],
-                    opacity: [0, 1, 1, 0.9, 0.7],
+                    scale: [0, 2.2, 1.6, 1.8, 1.5],
+                    rotate: [0, 60, -30, 15, 0],
+                    opacity: [0, 1, 1, 0.95, 0.85],
                   }}
-                  exit={{ scale: 0.3, opacity: 0 }}
-                  transition={{ duration: 0.8, ease: "easeOut", times: [0, 0.2, 0.4, 0.7, 1] }}
-                >
-                  💥
-                </motion.div>
+                  exit={{ scale: 0.5, opacity: 0 }}
+                  transition={{ duration: 0.7, ease: "easeOut", times: [0, 0.2, 0.4, 0.7, 1] }}
+                />
               )}
             </AnimatePresence>
           </div>

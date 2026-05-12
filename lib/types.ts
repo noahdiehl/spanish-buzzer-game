@@ -45,7 +45,18 @@ export interface Team {
   connected: boolean;
 }
 
-export type MinigameKind = "flappy" | "draw" | "banana" | "geom";
+export type MinigameKind = "flappy" | "draw" | "banana" | "geom" | "felix";
+
+export type FelixStatus =
+  | "intro"            // 1.5s zoom-in / world transition
+  | "shoot1"           // players smash spacebar to shoot Felix
+  | "questionThrow"    // Felix freezes, hurls his arm with a question
+  | "questionCountdown"// 3-2-1
+  | "questionPlay"     // normal buzz mechanics inside the boss arena
+  | "questionBuzzed"   // a team buzzed, teacher judges
+  | "shoot2"           // boxes flew off — finish him
+  | "death"            // crumbling away
+  | "felixOver";       // brief pause before transitioning to ended
 
 export interface GeomCube {
   teamId: number;
@@ -92,7 +103,7 @@ export interface FlappyPipe {
 
 export interface MinigameState {
   kind: MinigameKind;
-  status: "intro" | "playing" | "over" | "study" | "drawing" | "judging" | BananaStatus;
+  status: "intro" | "playing" | "over" | "study" | "drawing" | "judging" | BananaStatus | FelixStatus;
   countdownMs: number; // for intro / study / drawing / banana phase timers
   elapsedMs: number;   // since playing started (flappy)
   // Flappy-specific
@@ -106,6 +117,13 @@ export interface MinigameState {
   // Geom-specific
   cubes: GeomCube[];
   obstacles: GeomObstacle[];
+  // Felix-specific
+  felixHp: number;          // 0-100
+  felixHpMax: number;
+  felixFlashUntilMs: number; // when red-flash should stop
+  felixShotsTotal: number;  // monotonic counter so client can detect shot events
+  felixQuestion: string | null;
+  felixBuzzedWrong: number[];
 }
 
 export interface GameState {
@@ -154,6 +172,7 @@ export type ClientMsg =
   | { type: "setQuestionsAnswered"; count: number }
   | { type: "flap" }
   | { type: "jump" }
+  | { type: "shoot" }
   | { type: "submitDrawing"; dataUrl: string }
   | { type: "judgeDraw"; winnerTeamId: number }
   | { type: "resume"; token: string }
