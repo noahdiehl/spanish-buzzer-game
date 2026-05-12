@@ -46,17 +46,17 @@ const MINIGAME_CYCLE: ("flappy" | "draw" | "banana" | "geom" | "felix")[] = [
 
 // === DESTROY FELIX constants ===
 const FELIX_TICK_MS = 33;
-const FELIX_INTRO_MS = 1500;
-const FELIX_SHOOT1_MS = 9000;
-const FELIX_QUESTION_THROW_MS = 1800;
-const FELIX_QUESTION_COUNTDOWN_MS = 3000;
+const FELIX_INTRO_MS = 1800;
+const FELIX_SHOOT1_MS = 14000;
+const FELIX_QUESTION_THROW_MS = 2400;
+const FELIX_QUESTION_COUNTDOWN_MS = 3200;
 const FELIX_QUESTION_MAX_MS = 15000;
-const FELIX_SHOOT2_MS = 3500;
-const FELIX_DEATH_MS = 2600;
+const FELIX_SHOOT2_MS = 6000;
+const FELIX_DEATH_MS = 2800;
 const FELIX_OVER_MS = 800;
-const FELIX_HP_MAX = 100;
-const FELIX_HP_FLOOR_SHOOT1 = 28;   // can't drop below this during shoot1
-const FELIX_SHOT_COOLDOWN_MS = 140; // per-player rate limit (~7 shots/sec)
+const FELIX_HP_MAX = 600;
+const FELIX_HP_FLOOR_SHOOT1 = 180;
+const FELIX_SHOT_COOLDOWN_MS = 140;
 const FELIX_SHOT_DAMAGE = 1;
 const FELIX_FLASH_MS = 130;
 const FELIX_CORRECT_BONUS = 10000;
