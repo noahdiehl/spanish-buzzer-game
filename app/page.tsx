@@ -5,6 +5,7 @@ import { useGame } from "@/lib/useGame";
 import { Flappy } from "./Flappy";
 import { DrawCanvas } from "./DrawCanvas";
 import { Banana } from "./Banana";
+import { Geom } from "./Geom";
 import styles from "./play.module.css";
 
 const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
@@ -43,10 +44,11 @@ export default function PlayPage() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.code !== "Space" || youAreTeamId === null) return;
-      // Minigame: spacebar = flap
+      // Minigame: spacebar = flap (flappy) or jump (geom)
       if (state?.phase === "minigame" && state.minigame?.status === "playing") {
         e.preventDefault();
-        send({ type: "flap" });
+        if (state.minigame.kind === "flappy") send({ type: "flap" });
+        else if (state.minigame.kind === "geom") send({ type: "jump" });
         return;
       }
       // Regular question: spacebar = buzz (with locks)
@@ -118,15 +120,52 @@ export default function PlayPage() {
           <Banana mg={state.minigame} teams={state.teams} size="player" />
         )}
 
-        {state.phase === "minigame" && state.minigame?.kind === "flappy" && (
+        {state.phase === "minigame" && state.minigame?.kind === "geom" && (() => {
+          const mg = state.minigame!;
+          const w = Math.min(420, typeof window !== "undefined" ? window.innerWidth - 32 : 420);
+          // Match host aspect ratio (900x520)
+          const h = Math.round((w * 520) / 900);
+          const myCube = mg.cubes.find((c) => c.teamId === youAreTeamId);
+          return (
+            <div className={styles.center}>
+              <div className={styles.subtitle}>GEOMETRY MARCO</div>
+              <Geom
+                mg={mg}
+                teams={state.teams}
+                highlightTeamId={youAreTeamId}
+                width={w}
+                height={h}
+              />
+              {mg.status === "playing" && (
+                myCube?.alive ? (
+                  <motion.button
+                    className={`primary ${styles.flapBtn}`}
+                    onClick={() => send({ type: "jump" })}
+                    whileTap={{ scale: 0.9 }}
+                  >
+                    TAP / SPACE TO JUMP
+                  </motion.button>
+                ) : (
+                  <div className={styles.hint}>YOU CRASHED — watch the rest</div>
+                )
+              )}
+            </div>
+          );
+        })()}
+
+        {state.phase === "minigame" && state.minigame?.kind === "flappy" && (() => {
+          const w = Math.min(420, typeof window !== "undefined" ? window.innerWidth - 32 : 420);
+          // Match host aspect ratio (820x520)
+          const h = Math.round((w * 520) / 820);
+          return (
           <div className={styles.center}>
             <div className={styles.subtitle}>FLAPPY MARCO</div>
             <Flappy
-              mg={state.minigame}
+              mg={state.minigame!}
               teams={state.teams}
               highlightTeamId={youAreTeamId}
-              width={Math.min(360, window.innerWidth - 60)}
-              height={Math.min(360, window.innerWidth - 60)}
+              width={w}
+              height={h}
             />
             {state.minigame.status === "playing" && (() => {
               const myBird = state.minigame!.birds.find((b) => b.teamId === youAreTeamId);
@@ -145,7 +184,8 @@ export default function PlayPage() {
               );
             })()}
           </div>
-        )}
+          );
+        })()}
 
         {state.phase === "minigame" && state.minigame?.kind === "draw" && (() => {
           const mg = state.minigame!;

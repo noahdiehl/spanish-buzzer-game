@@ -3,7 +3,7 @@ import { parse } from "url";
 import { randomUUID } from "crypto";
 import next from "next";
 import { WebSocketServer, WebSocket } from "ws";
-import type { ClientMsg, GameState, ServerMsg, Team, ModifierKey, MinigameState, FlappyPipe } from "./lib/types";
+import type { ClientMsg, GameState, ServerMsg, Team, ModifierKey, MinigameState, FlappyPipe, GeomObstacleType } from "./lib/types";
 import { MODIFIERS } from "./lib/types";
 import { QUESTIONS } from "./lib/questions";
 
@@ -39,7 +39,23 @@ const DRAW_STUDY_MS = 5000;
 const DRAW_DRAWING_MS = 20000;
 const DRAW_WINNER_POINTS = 10000;
 
-const MINIGAME_CYCLE: ("flappy" | "draw" | "banana")[] = ["flappy", "draw", "banana"];
+const MINIGAME_CYCLE: ("flappy" | "draw" | "banana" | "geom")[] = ["flappy", "draw", "banana", "geom"];
+
+// === GEOMETRY DASH constants ===
+const GEOM_TICK_MS = 33;
+const GEOM_INTRO_MS = 3000;
+const GEOM_MAX_MS = 60000;
+const GEOM_GRAVITY = 4.2;            // per second (downward)
+const GEOM_JUMP_VY = 1.55;
+const GEOM_PAD_VY = 2.3;
+const GEOM_ORB_VY = 1.8;
+const GEOM_BASE_SPEED = 0.45;        // base obstacle scroll speed (per second)
+const GEOM_CUBE_X = 0.22;
+const GEOM_CUBE_SIZE = 0.075;        // square size (normalized)
+const GEOM_ORB_RADIUS = 0.06;        // how close cube must be to consume orb
+const GEOM_GROUND_Y = 0;             // bottom
+const GEOM_CEILING_Y = 1;
+const GEOM_BASE_SPAWN_MS = 1100;     // base interval between obstacles
 
 // Banana event timings
 const BANANA_ENTER_MS = 900;
@@ -188,7 +204,8 @@ function startMinigame() {
 
   if (kind === "flappy") startFlappy();
   else if (kind === "draw") startDraw();
-  else startBanana();
+  else if (kind === "banana") startBanana();
+  else startGeom();
 }
 
 function startFlappy() {
@@ -208,6 +225,8 @@ function startFlappy() {
     drawings: {},
     bananaVictimId: null,
     bananaDeduction: 0,
+    cubes: [],
+    obstacles: [],
   };
   state.minigame = mg;
   flappyPipeTimer = FLAPPY_PIPE_INTERVAL_MS - FLAPPY_FIRST_PIPE_DELAY_MS;
@@ -230,6 +249,8 @@ function startDraw() {
     drawings: {},
     bananaVictimId: null,
     bananaDeduction: 0,
+    cubes: [],
+    obstacles: [],
   };
   state.minigame = mg;
 
@@ -237,6 +258,244 @@ function startDraw() {
     drawTick();
     broadcast();
   }, FLAPPY_TICK_MS);
+}
+
+// ============================================================
+//  GEOMETRY DASH MINIGAME
+// ============================================================
+
+let geomObstacleId = 0;
+let geomSpawnTimer = 0;
+
+function startGeom() {
+  const mg: MinigameState = {
+    kind: "geom",
+    status: "intro",
+    countdownMs: GEOM_INTRO_MS,
+    elapsedMs: 0,
+    birds: [],
+    pipes: [],
+    drawings: {},
+    bananaVictimId: null,
+    bananaDeduction: 0,
+    cubes: state.teams.map((t) => ({
+      teamId: t.id,
+      y: 0,
+      vy: 0,
+      onGround: true,
+      alive: true,
+      scoreMs: 0,
+      rotation: 0,
+    })),
+    obstacles: [],
+  };
+  state.minigame = mg;
+  geomObstacleId = 0;
+  geomSpawnTimer = 700; // first obstacle ~400ms after GO
+
+  tickInterval = setInterval(() => {
+    geomTick();
+    broadcast();
+  }, GEOM_TICK_MS);
+}
+
+function geomCurrentSpeed(elapsedMs: number): number {
+  // Scale from 1x to 1.6x over the full game duration.
+  const t = Math.min(1, elapsedMs / GEOM_MAX_MS);
+  return GEOM_BASE_SPEED * (1 + 0.6 * t);
+}
+
+function geomCurrentSpawnInterval(elapsedMs: number): number {
+  // Tighter over time: 1100ms → 600ms.
+  const t = Math.min(1, elapsedMs / GEOM_MAX_MS);
+  return GEOM_BASE_SPAWN_MS * (1 - 0.45 * t);
+}
+
+function pickObstacleType(elapsedMs: number): GeomObstacleType {
+  const t = Math.min(1, elapsedMs / GEOM_MAX_MS);
+  // Weighted random — early levels favor spikes, later ones mix more.
+  const weights: Record<GeomObstacleType, number> = {
+    spike: 4,
+    block: 2 + t * 2,
+    bounce_pad: 1 + t * 1,
+    bounce_orb: 1 + t * 2,
+    ceiling_spike: t * 1.5,
+  };
+  const total = Object.values(weights).reduce((a, b) => a + b, 0);
+  let r = Math.random() * total;
+  for (const [k, w] of Object.entries(weights)) {
+    r -= w;
+    if (r <= 0) return k as GeomObstacleType;
+  }
+  return "spike";
+}
+
+function spawnObstacle(elapsedMs: number) {
+  const mg = state.minigame;
+  if (!mg) return;
+  const type = pickObstacleType(elapsedMs);
+  let y = 0;
+  if (type === "ceiling_spike") y = 1;
+  else if (type === "bounce_orb") y = 0.35 + Math.random() * 0.35;
+  else if (type === "block") y = 0.18 + Math.random() * 0.12; // top of block above ground
+  mg.obstacles.push({ id: geomObstacleId++, x: 1.1, y, type });
+}
+
+function rectsOverlap(
+  ax: number, ay: number, aw: number, ah: number,
+  bx: number, by: number, bw: number, bh: number,
+) {
+  return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+}
+
+function geomTick() {
+  const mg = state.minigame;
+  if (!mg || mg.kind !== "geom") return;
+  const dt = GEOM_TICK_MS / 1000;
+
+  if (mg.status === "intro") {
+    mg.countdownMs -= GEOM_TICK_MS;
+    if (mg.countdownMs <= 0) {
+      mg.status = "playing";
+      mg.countdownMs = 0;
+    }
+    return;
+  }
+  if (mg.status !== "playing") return;
+
+  mg.elapsedMs += GEOM_TICK_MS;
+  const speed = geomCurrentSpeed(mg.elapsedMs);
+
+  // Physics for cubes
+  for (const cube of mg.cubes) {
+    if (!cube.alive) continue;
+    cube.vy -= GEOM_GRAVITY * dt;
+    cube.y += cube.vy * dt;
+    cube.onGround = false;
+    if (cube.y <= GEOM_GROUND_Y) {
+      cube.y = GEOM_GROUND_Y;
+      cube.vy = 0;
+      cube.onGround = true;
+      // Snap rotation to nearest 90° on landing
+      cube.rotation = Math.round(cube.rotation / 90) * 90;
+    }
+    if (cube.y > GEOM_CEILING_Y) {
+      // Hit ceiling — die
+      cube.alive = false;
+      cube.scoreMs = mg.elapsedMs;
+      continue;
+    }
+    // Rotate while airborne
+    if (!cube.onGround) {
+      cube.rotation += 360 * dt * 1.6; // ~1.6 rotations per second
+    }
+  }
+
+  // Move obstacles
+  for (const o of mg.obstacles) o.x -= speed * dt;
+  mg.obstacles = mg.obstacles.filter((o) => o.x > -0.2);
+
+  // Spawn schedule
+  geomSpawnTimer -= GEOM_TICK_MS;
+  if (geomSpawnTimer <= 0) {
+    spawnObstacle(mg.elapsedMs);
+    geomSpawnTimer = geomCurrentSpawnInterval(mg.elapsedMs);
+  }
+
+  // Collisions / interactions
+  for (const cube of mg.cubes) {
+    if (!cube.alive) continue;
+    const cx = GEOM_CUBE_X - GEOM_CUBE_SIZE / 2;
+    const cy = cube.y; // bottom of cube
+    const cw = GEOM_CUBE_SIZE;
+    const ch = GEOM_CUBE_SIZE;
+
+    for (const o of mg.obstacles) {
+      const ox = o.x - 0.045;
+      switch (o.type) {
+        case "spike": {
+          // Ground spike — triangle with base at ground, tip up at y=0.08
+          // Use slightly forgiving box collision (0.07 wide, 0.07 tall)
+          if (rectsOverlap(cx, cy, cw, ch, ox + 0.012, 0, 0.066, 0.07)) {
+            cube.alive = false;
+            cube.scoreMs = mg.elapsedMs;
+          }
+          break;
+        }
+        case "ceiling_spike": {
+          // Ceiling spike — base at top, tip down. Box at y range [0.93, 1].
+          if (rectsOverlap(cx, cy, cw, ch, ox + 0.012, 0.93, 0.066, 0.07)) {
+            cube.alive = false;
+            cube.scoreMs = mg.elapsedMs;
+          }
+          break;
+        }
+        case "block": {
+          // Solid block: from ground up to o.y. Cube can land on top.
+          const blockH = o.y;
+          const bx = ox + 0.005, by = 0, bw = 0.085, bh = blockH;
+          if (rectsOverlap(cx, cy, cw, ch, bx, by, bw, bh)) {
+            // Hit the side or top of block.
+            // If cube was falling AND its bottom is above the block top -> land on it.
+            const cubeBottom = cy;
+            if (cube.vy <= 0 && cubeBottom + 0.06 >= blockH) {
+              cube.y = blockH;
+              cube.vy = 0;
+              cube.onGround = true;
+              cube.rotation = Math.round(cube.rotation / 90) * 90;
+            } else {
+              cube.alive = false;
+              cube.scoreMs = mg.elapsedMs;
+            }
+          }
+          break;
+        }
+        case "bounce_pad": {
+          // Pad on ground — touch top = big launch.
+          const px = ox + 0.005, py = 0, pw = 0.085, ph = 0.04;
+          if (rectsOverlap(cx, cy, cw, ch, px, py, pw, ph)) {
+            cube.vy = GEOM_PAD_VY;
+            cube.onGround = false;
+          }
+          break;
+        }
+        case "bounce_orb": {
+          // Orb consumed on jump input when nearby — handled in "jump" handler.
+          // Just visual here.
+          break;
+        }
+      }
+      if (!cube.alive) break;
+    }
+  }
+
+  // Update aliveMs for living cubes
+  for (const cube of mg.cubes) {
+    if (cube.alive) cube.scoreMs = mg.elapsedMs;
+  }
+
+  // End conditions
+  const aliveCount = mg.cubes.filter((c) => c.alive).length;
+  if (aliveCount === 0 || mg.elapsedMs >= GEOM_MAX_MS) {
+    endGeom();
+  }
+}
+
+function endGeom() {
+  const mg = state.minigame;
+  if (!mg) return;
+  mg.status = "over";
+  stopTimer();
+  const ranked = [...mg.cubes].sort((a, b) => b.scoreMs - a.scoreMs);
+  const awards = [10000, 5000, 2000, 0];
+  ranked.forEach((c, i) => {
+    const team = state.teams.find((t) => t.id === c.teamId);
+    if (team) team.score += awards[i] ?? 0;
+  });
+  broadcast();
+  setTimeout(() => {
+    if (state.phase === "minigame") finalizeMinigameWin(ranked[0]?.teamId ?? null, awards[0]);
+  }, 5000);
 }
 
 function startBanana() {
@@ -284,10 +543,10 @@ function bananaTick() {
       mg.countdownMs = BANANA_ROULETTE_MS;
       break;
     case "roulette":
-      // Apply deduction server-side
+      // Apply deduction server-side — no floor, can go deep into the negative.
       if (mg.bananaVictimId !== null) {
         const victim = state.teams.find((t) => t.id === mg.bananaVictimId);
-        if (victim) victim.score = Math.max(0, victim.score - mg.bananaDeduction);
+        if (victim) victim.score -= mg.bananaDeduction;
       }
       mg.status = "reveal";
       mg.countdownMs = BANANA_REVEAL_MS;
@@ -565,6 +824,39 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       if (bird && bird.alive) bird.vy = FLAPPY_JUMP_VY;
       return;
     }
+    case "jump": {
+      if (state.phase !== "minigame" || !state.minigame) return;
+      if (state.minigame.kind !== "geom") return;
+      if (state.minigame.status !== "playing") return;
+      if (client.teamId === null) return;
+      const cube = state.minigame.cubes.find((c) => c.teamId === client.teamId);
+      if (!cube || !cube.alive) return;
+      if (cube.onGround) {
+        cube.vy = GEOM_JUMP_VY;
+        cube.onGround = false;
+        return;
+      }
+      // Air tap: consume nearest unused bounce orb within range.
+      const cubeCx = GEOM_CUBE_X;
+      const cubeCy = cube.y + GEOM_CUBE_SIZE / 2;
+      let bestOrb: typeof state.minigame.obstacles[number] | null = null;
+      let bestDist = Infinity;
+      for (const o of state.minigame.obstacles) {
+        if (o.type !== "bounce_orb" || o.consumed) continue;
+        const dx = o.x - cubeCx;
+        const dy = o.y - cubeCy;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < GEOM_ORB_RADIUS && d < bestDist) {
+          bestDist = d;
+          bestOrb = o;
+        }
+      }
+      if (bestOrb) {
+        bestOrb.consumed = true;
+        cube.vy = GEOM_ORB_VY;
+      }
+      return;
+    }
     case "submitDrawing": {
       if (state.phase !== "minigame" || !state.minigame) return;
       if (state.minigame.kind !== "draw") return;
@@ -593,6 +885,27 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       state.answeredWrong = [];
       state.lockedTeamId = null;
       state.lockedMs = 0;
+      broadcast();
+      return;
+    }
+    case "setQuestionsAnswered": {
+      // Dev/testing affordance: jump to a specific question. Aligns the minigame
+      // cycle so the NEXT minigame trigger uses the appropriate kind.
+      const n = Math.max(0, Math.min(9999, Math.floor(msg.count)));
+      stopTimer();
+      state.questionsAnswered = n;
+      state.minigameCount = Math.floor(n / MINIGAME_EVERY);
+      state.questionIdx = n % QUESTIONS.length;
+      state.modifier = null;
+      state.wheelResult = null;
+      state.buzzedTeamId = null;
+      state.lastJudgment = null;
+      state.answeredWrong = [];
+      state.lockedTeamId = null;
+      state.lockedMs = 0;
+      state.bypassNextRoundCheck = false;
+      state.minigame = null;
+      startQuestion();
       broadcast();
       return;
     }

@@ -45,7 +45,27 @@ export interface Team {
   connected: boolean;
 }
 
-export type MinigameKind = "flappy" | "draw" | "banana";
+export type MinigameKind = "flappy" | "draw" | "banana" | "geom";
+
+export interface GeomCube {
+  teamId: number;
+  y: number;        // 0 = ground, 1 = ceiling
+  vy: number;
+  onGround: boolean;
+  alive: boolean;
+  scoreMs: number;
+  rotation: number; // visual rotation, accumulates while airborne
+}
+
+export type GeomObstacleType = "spike" | "ceiling_spike" | "block" | "bounce_pad" | "bounce_orb";
+
+export interface GeomObstacle {
+  id: number;
+  x: number;          // 0 left edge, 1 right edge
+  y: number;          // base y (for blocks: top of block; for spikes: where the tip sits)
+  type: GeomObstacleType;
+  consumed?: boolean; // for bounce orbs once used
+}
 
 export type BananaStatus =
   | "enter"      // banana man slides up
@@ -83,6 +103,9 @@ export interface MinigameState {
   // Banana-specific
   bananaVictimId: number | null;
   bananaDeduction: number;
+  // Geom-specific
+  cubes: GeomCube[];
+  obstacles: GeomObstacle[];
 }
 
 export interface GameState {
@@ -128,7 +151,9 @@ export type ClientMsg =
   | { type: "tradeChoice"; targetTeamId: number }
   | { type: "endGame" }
   | { type: "setScore"; teamId: number; score: number }
+  | { type: "setQuestionsAnswered"; count: number }
   | { type: "flap" }
+  | { type: "jump" }
   | { type: "submitDrawing"; dataUrl: string }
   | { type: "judgeDraw"; winnerTeamId: number }
   | { type: "resume"; token: string }

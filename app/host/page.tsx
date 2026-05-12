@@ -7,6 +7,7 @@ import { MODIFIERS } from "@/lib/types";
 import { Wheel } from "./Wheel";
 import { Flappy } from "../Flappy";
 import { Banana } from "../Banana";
+import { Geom } from "../Geom";
 
 // warm muted team palette: coral, teal, mustard, plum
 const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
@@ -16,6 +17,8 @@ export default function MainBoard() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scoreOpen, setScoreOpen] = useState(false);
   const [draftScores, setDraftScores] = useState<Record<number, string>>({});
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [jumpDraft, setJumpDraft] = useState("");
   const nukeAudioRef = useRef<HTMLAudioElement | null>(null);
   const nukePlayedRef = useRef(false);
   const buzzAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -262,10 +265,55 @@ export default function MainBoard() {
               <button onClick={() => { send({ type: "reset" }); setMenuOpen(false); }}>RESET GAME</button>
               <button onClick={() => { send({ type: "endGame" }); setMenuOpen(false); }}>END GAME</button>
               <button onClick={openEditScores}>EDIT SCORES</button>
+              <button onClick={() => { setJumpDraft(String(state.questionsAnswered)); setJumpOpen(true); setMenuOpen(false); }}>GO TO Q...</button>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* JUMP TO QUESTION PANEL */}
+      <AnimatePresence>
+        {jumpOpen && (
+          <motion.div
+            className={styles.scoreModal}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <div className={styles.scoreCard}>
+              <h2 className={styles.scoreTitle}>GO TO Q</h2>
+              <div className={styles.scoreRow}>
+                <span>SET COUNT TO</span>
+                <input
+                  autoFocus
+                  type="number"
+                  value={jumpDraft}
+                  onChange={(e) => setJumpDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const n = parseInt(jumpDraft, 10);
+                      if (!isNaN(n)) send({ type: "setQuestionsAnswered", count: n });
+                      setJumpOpen(false);
+                    }
+                  }}
+                />
+              </div>
+              <p style={{ fontFamily: "VT323, monospace", fontSize: "1rem", color: "var(--ink-soft)", textAlign: "center", letterSpacing: 1 }}>
+                e.g. 19 → next answer triggers minigame 4 (geom)<br />
+                4 → next answer triggers minigame 1 (flappy)
+              </p>
+              <div className={styles.scoreActions}>
+                <button onClick={() => setJumpOpen(false)}>CANCEL</button>
+                <button className="success" onClick={() => {
+                  const n = parseInt(jumpDraft, 10);
+                  if (!isNaN(n)) send({ type: "setQuestionsAnswered", count: n });
+                  setJumpOpen(false);
+                }}>GO</button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* EDIT SCORES PANEL */}
       <AnimatePresence>
@@ -438,6 +486,13 @@ export default function MainBoard() {
           <div className={styles.minigameWrap}>
             <h2 className={styles.minigameTitle}>FLAPPY MARCO</h2>
             <Flappy mg={state.minigame} teams={state.teams} height={520} width={820} />
+          </div>
+        )}
+
+        {state.phase === "minigame" && state.minigame?.kind === "geom" && (
+          <div className={styles.minigameWrap}>
+            <h2 className={styles.minigameTitle}>GEOMETRY MARCO</h2>
+            <Geom mg={state.minigame} teams={state.teams} height={520} width={900} />
           </div>
         )}
 
