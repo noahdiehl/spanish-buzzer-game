@@ -51,8 +51,11 @@ const GEOM_PAD_VY = 2.3;
 const GEOM_ORB_VY = 1.8;
 const GEOM_BASE_SPEED = 0.45;        // base obstacle scroll speed (per second)
 const GEOM_CUBE_X = 0.22;
-const GEOM_CUBE_SIZE = 0.075;        // square size (normalized)
-const GEOM_ORB_RADIUS = 0.06;        // how close cube must be to consume orb
+// World coords aren't aspect-corrected, so we pick W and H separately
+// so the rendered cube looks roughly square in pixels (host arena is 900x506).
+const GEOM_CUBE_W = 0.06;            // world-x width
+const GEOM_CUBE_H = 0.10;            // world-y height
+const GEOM_ORB_RADIUS = 0.07;        // how close cube must be to consume orb
 const GEOM_GROUND_Y = 0;             // bottom
 const GEOM_CEILING_Y = 1;
 const GEOM_BASE_SPAWN_MS = 1100;     // base interval between obstacles
@@ -335,9 +338,17 @@ function spawnObstacle(elapsedMs: number) {
   if (!mg) return;
   const type = pickObstacleType(elapsedMs);
   let y = 0;
-  if (type === "ceiling_spike") y = 1;
-  else if (type === "bounce_orb") y = 0.35 + Math.random() * 0.35;
-  else if (type === "block") y = 0.18 + Math.random() * 0.12; // top of block above ground
+  if (type === "ceiling_spike") {
+    y = 1;
+  } else if (type === "bounce_orb") {
+    // Snap orb to grid cells (cube heights), at 3 or 4 cells up
+    const cells = 3 + Math.floor(Math.random() * 2);
+    y = Math.min(0.92, cells * GEOM_CUBE_H);
+  } else if (type === "block") {
+    // Block height is an integer multiple of cube height (grid stacks)
+    const cells = 1 + Math.floor(Math.random() * 2); // 1 or 2 cells tall
+    y = cells * GEOM_CUBE_H;
+  }
   mg.obstacles.push({ id: geomObstacleId++, x: 1.1, y, type });
 }
 
@@ -405,26 +416,31 @@ function geomTick() {
   // Collisions / interactions
   for (const cube of mg.cubes) {
     if (!cube.alive) continue;
-    const cx = GEOM_CUBE_X - GEOM_CUBE_SIZE / 2;
+    const cx = GEOM_CUBE_X - GEOM_CUBE_W / 2;
     const cy = cube.y; // bottom of cube
-    const cw = GEOM_CUBE_SIZE;
-    const ch = GEOM_CUBE_SIZE;
+    const cw = GEOM_CUBE_W;
+    const ch = GEOM_CUBE_H;
 
     for (const o of mg.obstacles) {
-      const ox = o.x - 0.045;
       switch (o.type) {
         case "spike": {
-          // Ground spike — triangle with base at ground, tip up at y=0.08
-          // Use slightly forgiving box collision (0.07 wide, 0.07 tall)
-          if (rectsOverlap(cx, cy, cw, ch, ox + 0.012, 0, 0.066, 0.07)) {
+          // Ground spike: 1 cell wide, 1 cell tall (matches cube). Base at world y=0.
+          // Slight forgiveness inset (~15% smaller hitbox than visual).
+          const inset = 0.012;
+          if (rectsOverlap(cx, cy, cw, ch,
+              o.x - GEOM_CUBE_W / 2 + inset, 0,
+              GEOM_CUBE_W - 2 * inset, GEOM_CUBE_H - inset)) {
             cube.alive = false;
             cube.scoreMs = mg.elapsedMs;
           }
           break;
         }
         case "ceiling_spike": {
-          // Ceiling spike — base at top, tip down. Box at y range [0.93, 1].
-          if (rectsOverlap(cx, cy, cw, ch, ox + 0.012, 0.93, 0.066, 0.07)) {
+          // Ceiling spike: base at top (y=1), tip down — matches cube size.
+          const inset = 0.012;
+          if (rectsOverlap(cx, cy, cw, ch,
+              o.x - GEOM_CUBE_W / 2 + inset, 1 - GEOM_CUBE_H + inset,
+              GEOM_CUBE_W - 2 * inset, GEOM_CUBE_H - inset)) {
             cube.alive = false;
             cube.scoreMs = mg.elapsedMs;
           }
@@ -433,12 +449,11 @@ function geomTick() {
         case "block": {
           // Solid block: from ground up to o.y. Cube can land on top.
           const blockH = o.y;
-          const bx = ox + 0.005, by = 0, bw = 0.085, bh = blockH;
-          if (rectsOverlap(cx, cy, cw, ch, bx, by, bw, bh)) {
-            // Hit the side or top of block.
-            // If cube was falling AND its bottom is above the block top -> land on it.
+          const bx = o.x - GEOM_CUBE_W / 2;
+          const bw = GEOM_CUBE_W;
+          if (rectsOverlap(cx, cy, cw, ch, bx, 0, bw, blockH)) {
             const cubeBottom = cy;
-            if (cube.vy <= 0 && cubeBottom + 0.06 >= blockH) {
+            if (cube.vy <= 0 && cubeBottom + 0.04 >= blockH) {
               cube.y = blockH;
               cube.vy = 0;
               cube.onGround = true;
@@ -451,9 +466,10 @@ function geomTick() {
           break;
         }
         case "bounce_pad": {
-          // Pad on ground — touch top = big launch.
-          const px = ox + 0.005, py = 0, pw = 0.085, ph = 0.04;
-          if (rectsOverlap(cx, cy, cw, ch, px, py, pw, ph)) {
+          // Pad on ground — touching top = big launch.
+          const px = o.x - GEOM_CUBE_W / 2;
+          const pw = GEOM_CUBE_W;
+          if (rectsOverlap(cx, cy, cw, ch, px, 0, pw, 0.035)) {
             cube.vy = GEOM_PAD_VY;
             cube.onGround = false;
           }
@@ -838,7 +854,7 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
       }
       // Air tap: consume nearest unused bounce orb within range.
       const cubeCx = GEOM_CUBE_X;
-      const cubeCy = cube.y + GEOM_CUBE_SIZE / 2;
+      const cubeCy = cube.y + GEOM_CUBE_H / 2;
       let bestOrb: typeof state.minigame.obstacles[number] | null = null;
       let bestDist = Infinity;
       for (const o of state.minigame.obstacles) {

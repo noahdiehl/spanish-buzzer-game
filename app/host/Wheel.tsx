@@ -56,9 +56,11 @@ export function Wheel({ result, onSpinRequest, onSpinComplete, canSpinHere = fal
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.title}>WHEEL OF MARCO</div>
+      {!showResult && <div className={styles.title}>WHEEL OF MARCO</div>}
 
-      <div className={styles.wheelStage}>
+      {/* Hide the wheel entirely while the result is showing — the 7 segments
+         and spinning motion are expensive to keep alive behind the overlay. */}
+      <div className={styles.wheelStage} style={{ display: showResult ? "none" : undefined }}>
         <div className={styles.pointer}>▼</div>
         <motion.div
           className={styles.wheel}
@@ -115,10 +117,11 @@ export function Wheel({ result, onSpinRequest, onSpinComplete, canSpinHere = fal
         {showResult && result && (
           <motion.div
             className={styles.resultOverlay}
-            initial={{ scale: 0, opacity: 0 }}
+            initial={{ scale: 0.85, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 1.4, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 220, damping: 16 }}
+            exit={{ scale: 1.05, opacity: 0 }}
+            transition={{ duration: 0.25, ease: "easeOut" }}
+            style={{ willChange: "transform, opacity" }}
           >
             {(() => {
               const m = MODIFIERS.find((x) => x.key === result)!;

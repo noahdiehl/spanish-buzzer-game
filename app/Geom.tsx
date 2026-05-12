@@ -5,6 +5,10 @@ import type { MinigameState, Team } from "@/lib/types";
 const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
 const TEAM_HUE_ROTATE = [-40, 110, 0, 260];
 
+const CUBE_W = 0.06;
+const CUBE_H = 0.10;
+const CUBE_X = 0.22;
+
 interface Props {
   mg: MinigameState;
   teams: Team[];
@@ -13,18 +17,17 @@ interface Props {
   height: number;
 }
 
-// Coordinate helpers: world y is 0 = ground (bottom), 1 = ceiling (top).
-// Screen y is 0 = top, increases downward.
-const GROUND_PX = 14; // ground strip thickness in px
-function worldToScreenY(worldY: number, playH: number) {
-  // playable height = height - groundPx
-  return (1 - worldY) * playH;
-}
+const GROUND_PX = 18; // ground strip thickness
 
 export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
   const playH = height - GROUND_PX;
-  const cubeSize = 0.075 * Math.min(width, height);
-  const cubeXpx = 0.22 * width;
+
+  // World -> screen
+  const worldY = (y: number) => playH * (1 - y);
+
+  const cubeWPx = CUBE_W * width;
+  const cubeHPx = CUBE_H * playH;
+  const cubeLeft = CUBE_X * width - cubeWPx / 2;
 
   return (
     <div
@@ -35,23 +38,41 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
         overflow: "hidden",
         borderRadius: 18,
         border: "4px solid var(--ink)",
-        boxShadow: "0 8px 0 0 var(--ink), 0 0 40px rgba(177, 74, 255, 0.45)",
+        boxShadow: "0 8px 0 0 var(--ink)",
         background:
-          "radial-gradient(ellipse at 60% 40%, #3a2470 0%, #1a0d3a 60%, #0a0420 100%)",
+          "linear-gradient(180deg, #ffd166 0%, #fca678 35%, #f072a0 70%, #c14cc7 100%)",
       }}
     >
-      {/* Scrolling neon grid backdrop */}
+      {/* Fluffy clouds backdrop */}
       <div
         style={{
           position: "absolute",
           inset: 0,
+          opacity: 0.55,
           backgroundImage:
-            "linear-gradient(rgba(255,43,214,0.18) 1px, transparent 1px), linear-gradient(90deg, rgba(0,240,255,0.18) 1px, transparent 1px)",
-          backgroundSize: `${width / 12}px ${height / 12}px`,
-          animation: "geomGridScroll 1.4s linear infinite",
+            "radial-gradient(ellipse 80px 30px at 10% 25%, #fff 0%, transparent 60%)," +
+            "radial-gradient(ellipse 120px 40px at 70% 18%, #fff 0%, transparent 60%)," +
+            "radial-gradient(ellipse 90px 30px at 40% 60%, #fff 0%, transparent 60%)," +
+            "radial-gradient(ellipse 140px 36px at 85% 65%, #fff 0%, transparent 60%)",
+          animation: "geomCloudScroll 18s linear infinite",
         }}
       />
-      <style>{`@keyframes geomGridScroll { from { background-position: 0 0; } to { background-position: -${width / 12}px 0; } }`}</style>
+      <style>{`@keyframes geomCloudScroll { from { background-position: 0 0; } to { background-position: -${width}px 0; } }`}</style>
+
+      {/* Distant mountains silhouette */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: GROUND_PX,
+          height: 60,
+          background:
+            "linear-gradient(180deg, transparent 0%, rgba(70, 30, 100, 0.35) 100%)",
+          clipPath:
+            "polygon(0 100%, 0 60%, 10% 30%, 18% 55%, 28% 25%, 38% 50%, 48% 20%, 58% 55%, 70% 35%, 80% 60%, 90% 30%, 100% 55%, 100% 100%)",
+        }}
+      />
 
       {/* Ground */}
       <div
@@ -62,9 +83,51 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
           bottom: 0,
           height: GROUND_PX,
           background:
-            "linear-gradient(180deg, #b14aff 0%, #6a1aa0 100%)",
-          borderTop: "3px solid #ff2bd6",
-          boxShadow: "0 -8px 24px rgba(255,43,214,0.5)",
+            "linear-gradient(180deg, #7ec850 0%, #4a9b3e 70%, #2e6427 100%)",
+          borderTop: "3px solid #2e2418",
+          boxShadow: "inset 0 -6px 0 rgba(0,0,0,0.18)",
+        }}
+      />
+      {/* Ground checker pattern */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: GROUND_PX,
+          backgroundImage:
+            "repeating-linear-gradient(90deg, transparent 0 28px, rgba(0,0,0,0.12) 28px 56px)",
+          animation: "geomGroundScroll 0.6s linear infinite",
+        }}
+      />
+      <style>{`@keyframes geomGroundScroll { from { background-position: 0 0; } to { background-position: -56px 0; } }`}</style>
+
+      {/* Faint grid overlay (vertical cells) for that classic GD look */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: GROUND_PX,
+          backgroundImage:
+            `repeating-linear-gradient(180deg, rgba(255,255,255,0.10) 0 1px, transparent 1px ${CUBE_H * playH}px)`,
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* Sharp ground line at the top of the ground strip — visual anchor for cube/spike base */}
+      <div
+        style={{
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: GROUND_PX,
+          height: 2,
+          background: "#2e2418",
+          opacity: 0.6,
+          pointerEvents: "none",
         }}
       />
 
@@ -72,8 +135,9 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
       {mg.obstacles.map((o) => {
         const xPx = o.x * width;
         if (o.type === "spike") {
-          const triH = 0.08 * height;
-          const triW = 0.08 * width;
+          // Spike size matches the cube exactly so visual = collision = grid cell.
+          const triH = CUBE_H * playH;
+          const triW = CUBE_W * width;
           return (
             <div
               key={o.id}
@@ -85,15 +149,15 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                 height: 0,
                 borderLeft: `${triW / 2}px solid transparent`,
                 borderRight: `${triW / 2}px solid transparent`,
-                borderBottom: `${triH}px solid #ff2a2a`,
-                filter: "drop-shadow(0 0 6px #ff5050)",
+                borderBottom: `${triH}px solid #e35a3c`,
+                filter: "drop-shadow(2px 4px 0 #2e2418)",
               }}
             />
           );
         }
         if (o.type === "ceiling_spike") {
-          const triH = 0.08 * height;
-          const triW = 0.08 * width;
+          const triH = CUBE_H * playH;
+          const triW = CUBE_W * width;
           return (
             <div
               key={o.id}
@@ -105,15 +169,15 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                 height: 0,
                 borderLeft: `${triW / 2}px solid transparent`,
                 borderRight: `${triW / 2}px solid transparent`,
-                borderTop: `${triH}px solid #ff2a2a`,
-                filter: "drop-shadow(0 0 6px #ff5050)",
+                borderTop: `${triH}px solid #e35a3c`,
+                filter: "drop-shadow(2px -4px 0 #2e2418)",
               }}
             />
           );
         }
         if (o.type === "block") {
           const blockH = o.y * playH;
-          const blockW = 0.085 * width;
+          const blockW = CUBE_W * width;
           return (
             <div
               key={o.id}
@@ -123,16 +187,28 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                 bottom: GROUND_PX,
                 width: blockW,
                 height: blockH,
-                background: "linear-gradient(180deg, #4a9b8e 0%, #2a5e54 100%)",
-                border: "3px solid #00f0ff",
-                borderRadius: 4,
-                boxShadow: "inset 0 -4px 0 0 rgba(0,0,0,0.25), 0 0 12px rgba(0,240,255,0.5)",
+                background: "linear-gradient(180deg, #fde68a 0%, #d4a13a 100%)",
+                border: "3px solid #2e2418",
+                borderRadius: 6,
+                boxShadow: "inset 0 -5px 0 0 rgba(0,0,0,0.18), 3px 4px 0 #2e2418",
               }}
-            />
+            >
+              {/* brick lines */}
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 4,
+                  backgroundImage:
+                    "linear-gradient(0deg, transparent 49%, rgba(0,0,0,0.18) 49%, rgba(0,0,0,0.18) 51%, transparent 51%)",
+                  backgroundSize: `100% ${Math.max(8, blockH / 2)}px`,
+                  pointerEvents: "none",
+                }}
+              />
+            </div>
           );
         }
         if (o.type === "bounce_pad") {
-          const padW = 0.085 * width;
+          const padW = CUBE_W * width;
           return (
             <div
               key={o.id}
@@ -141,18 +217,19 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                 left: xPx - padW / 2,
                 bottom: GROUND_PX,
                 width: padW,
-                height: 14,
-                background: "#fff700",
-                border: "3px solid #ff9d00",
-                borderRadius: 4,
-                boxShadow: "0 0 16px #fff700, inset 0 -3px 0 0 #d4a13a",
-                color: "#7a5a00",
+                height: 18,
+                background: "linear-gradient(180deg, #ff5e7e 0%, #c12c50 100%)",
+                border: "3px solid #2e2418",
+                borderRadius: 5,
+                boxShadow: "0 0 14px rgba(255, 94, 126, 0.7), 3px 4px 0 #2e2418",
+                color: "#fff",
                 fontFamily: "VT323, monospace",
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: 700,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                textShadow: "1px 1px 0 #2e2418",
               }}
             >
               ▲▲
@@ -160,8 +237,8 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
           );
         }
         if (o.type === "bounce_orb") {
-          const cy = worldToScreenY(o.y, playH);
-          const r = 0.045 * Math.min(width, height);
+          const cy = worldY(o.y);
+          const r = 0.055 * Math.min(width, playH);
           const consumed = o.consumed;
           return (
             <div
@@ -174,13 +251,13 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                 height: r * 2,
                 borderRadius: "50%",
                 background: consumed
-                  ? "radial-gradient(circle at 35% 30%, #888 0%, #444 70%)"
-                  : "radial-gradient(circle at 35% 30%, #b14aff 0%, #6a1aa0 70%, #391259 100%)",
-                border: `3px solid ${consumed ? "#666" : "#ff2bd6"}`,
+                  ? "radial-gradient(circle at 35% 30%, #999 0%, #555 70%)"
+                  : "radial-gradient(circle at 35% 30%, #fff7a8 0%, #fff700 40%, #d4a13a 90%)",
+                border: `3px solid ${consumed ? "#666" : "#2e2418"}`,
                 boxShadow: consumed
                   ? "none"
-                  : "0 0 24px #b14aff, inset 0 0 10px rgba(255,43,214,0.6)",
-                animation: consumed ? "none" : "geomOrbPulse 1s ease-in-out infinite",
+                  : "0 0 28px #fff700, 0 0 12px #fffacc, inset 0 -6px 0 rgba(0,0,0,0.2)",
+                animation: consumed ? "none" : "geomOrbPulse 0.9s ease-in-out infinite",
                 opacity: consumed ? 0.4 : 1,
               }}
             />
@@ -196,20 +273,22 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
         if (!team) return null;
         const color = TEAM_COLORS[c.teamId];
         const hue = TEAM_HUE_ROTATE[c.teamId] ?? 0;
-        const yPx = worldToScreenY(c.y + 0.075, playH) - cubeSize; // c.y is bottom, draw from top-left
+        // c.y is BOTTOM of the cube in world coords (0 = ground)
+        const cubeBottomScreen = worldY(c.y);
+        const cubeTop = cubeBottomScreen - cubeHPx;
         const highlight = highlightTeamId === c.teamId;
         return (
           <div key={c.teamId}>
-            {/* Trail (only when alive) */}
+            {/* Trail */}
             {c.alive && (
               <div
                 style={{
                   position: "absolute",
-                  left: cubeXpx - cubeSize * 1.8,
-                  top: yPx + cubeSize * 0.15,
-                  width: cubeSize * 1.6,
-                  height: cubeSize * 0.7,
-                  background: `linear-gradient(90deg, transparent, ${color}88)`,
+                  left: cubeLeft - cubeWPx * 1.4,
+                  top: cubeTop + cubeHPx * 0.2,
+                  width: cubeWPx * 1.4,
+                  height: cubeHPx * 0.6,
+                  background: `linear-gradient(90deg, transparent, ${color}aa)`,
                   filter: "blur(4px)",
                   borderRadius: "50%",
                   pointerEvents: "none",
@@ -223,20 +302,20 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                 transition={{ type: "tween", duration: 0.05 }}
                 style={{
                   position: "absolute",
-                  left: cubeXpx - cubeSize / 2,
-                  top: yPx,
-                  width: cubeSize,
-                  height: cubeSize,
+                  left: cubeLeft,
+                  top: cubeTop,
+                  width: cubeWPx,
+                  height: cubeHPx,
                   filter: `hue-rotate(${hue}deg)${highlight ? " drop-shadow(0 0 12px rgba(255,255,255,0.9))" : ""}`,
                   border: highlight
-                    ? "4px solid rgba(255,255,255,0.8)"
-                    : "3px solid var(--ink)",
+                    ? "4px solid rgba(255,255,255,0.85)"
+                    : "3px solid #2e2418",
                   borderRadius: 6,
                   overflow: "hidden",
                   background: color,
                   boxShadow: highlight
                     ? `0 0 22px ${color}`
-                    : `0 0 12px ${color}`,
+                    : `3px 4px 0 #2e2418`,
                 }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -258,14 +337,14 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                   key={`boom-${c.teamId}`}
                   style={{
                     position: "absolute",
-                    left: cubeXpx - cubeSize,
-                    top: yPx - cubeSize / 2,
-                    width: cubeSize * 2,
-                    height: cubeSize * 2,
+                    left: cubeLeft - cubeWPx * 0.4,
+                    top: cubeTop - cubeHPx * 0.2,
+                    width: cubeWPx * 1.8,
+                    height: cubeHPx * 1.8,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: cubeSize * 1.6,
+                    fontSize: Math.min(cubeWPx, cubeHPx) * 1.6,
                     color,
                     pointerEvents: "none",
                   }}
@@ -295,7 +374,7 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "rgba(15, 5, 30, 0.55)",
+            background: "rgba(255, 255, 255, 0.35)",
           }}
         >
           <motion.div
@@ -307,8 +386,8 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
             style={{
               fontFamily: "Press Start 2P, monospace",
               fontSize: Math.min(width, height) * 0.18,
-              color: "#ff2bd6",
-              textShadow: "6px 6px 0 var(--ink), 0 0 40px #ff2bd6",
+              color: "#2e2418",
+              textShadow: "6px 6px 0 #fff700, 0 0 40px rgba(255, 247, 0, 0.6)",
               lineHeight: 1,
             }}
           >
@@ -333,7 +412,7 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              background: "rgba(15, 5, 30, 0.92)",
+              background: "rgba(255, 250, 234, 0.93)",
               gap: 12,
               padding: 16,
             }}
@@ -347,8 +426,8 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                   style={{
                     fontFamily: "Press Start 2P, monospace",
                     fontSize: Math.min(width, height) * 0.075,
-                    color: "#fff",
-                    textShadow: "4px 4px 0 #ff2bd6",
+                    color: "#2e2418",
+                    textShadow: "4px 4px 0 #fff700",
                     letterSpacing: 4,
                   }}
                 >
@@ -362,7 +441,7 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                     fontFamily: "Press Start 2P, monospace",
                     fontSize: Math.min(width, height) * 0.13,
                     color: winnerColor,
-                    textShadow: "6px 6px 0 var(--ink)",
+                    textShadow: "6px 6px 0 #2e2418",
                     letterSpacing: 4,
                     textAlign: "center",
                     lineHeight: 1.1,
@@ -377,8 +456,8 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                   style={{
                     fontFamily: "Press Start 2P, monospace",
                     fontSize: Math.min(width, height) * 0.09,
-                    color: "#39ff14",
-                    textShadow: "5px 5px 0 var(--ink)",
+                    color: "#4a9b3e",
+                    textShadow: "5px 5px 0 #2e2418",
                     letterSpacing: 3,
                   }}
                 >
@@ -386,7 +465,7 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                 </motion.div>
               </>
             ) : (
-              <div style={{ fontFamily: "Press Start 2P, monospace", fontSize: Math.min(width, height) * 0.07, color: "#fff" }}>
+              <div style={{ fontFamily: "Press Start 2P, monospace", fontSize: Math.min(width, height) * 0.07 }}>
                 NO SURVIVORS
               </div>
             )}

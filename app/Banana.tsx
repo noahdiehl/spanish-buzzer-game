@@ -82,16 +82,16 @@ export function Banana({ mg, teams, size, onTypeBlip }: Props) {
   // Enter slide-up animation: banana starts off-screen and rises during "enter"
   const isVisible = mg.status !== "exit";
   // Banana size scales with host vs player
-  const bananaImgSize = isHost ? 260 : 120;
-  const dialogFont = isHost ? 1.6 : 1.0; // rem
+  const bananaImgSize = isHost ? 220 : 110;
+  const dialogFont = isHost ? 2.0 : 1.0; // rem
 
   return (
     <div
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 4000,
-        background: "rgba(5, 0, 20, 0.92)",
+        zIndex: 99999,
+        background: "rgba(5, 0, 20, 0.94)",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -101,6 +101,50 @@ export function Banana({ mg, teams, size, onTypeBlip }: Props) {
         pointerEvents: "none",
       }}
     >
+      {/* Dialog box — rendered FIRST so it sits ABOVE the banana visually */}
+      {(dialog1Active || dialog2Active || laughActive) && (
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25 }}
+          style={{
+            background: "var(--panel)",
+            border: "5px solid var(--ink)",
+            borderRadius: 18,
+            padding: isHost ? "32px 48px" : "14px 18px",
+            boxShadow: "0 10px 0 0 var(--ink)",
+            maxWidth: isHost ? "84vw" : "92vw",
+            minWidth: isHost ? 720 : 280,
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: `${dialogFont}rem`,
+            lineHeight: 1.5,
+            color: "var(--ink)",
+            textShadow: "3px 3px 0 var(--amber)",
+            letterSpacing: 2,
+            textAlign: isHost ? "center" : "left",
+          }}
+        >
+          {dialog1Active && (
+            <>
+              {dialog1}
+              <Caret />
+            </>
+          )}
+          {dialog2Active && (
+            <>
+              {dialog2}
+              <Caret />
+            </>
+          )}
+          {laughActive && (
+            <>
+              {laughText}
+              <Caret />
+            </>
+          )}
+        </motion.div>
+      )}
+
       {/* Banana Man */}
       <AnimatePresence>
         <motion.img
@@ -126,49 +170,6 @@ export function Banana({ mg, teams, size, onTypeBlip }: Props) {
           }}
         />
       </AnimatePresence>
-
-      {/* Dialog box */}
-      {(dialog1Active || dialog2Active || laughActive) && (
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.25 }}
-          style={{
-            background: "var(--panel)",
-            border: "4px solid var(--ink)",
-            borderRadius: 14,
-            padding: isHost ? "20px 32px" : "14px 18px",
-            boxShadow: "0 8px 0 0 var(--ink)",
-            maxWidth: isHost ? "70vw" : "92vw",
-            minWidth: isHost ? 480 : 280,
-            fontFamily: "'Press Start 2P', monospace",
-            fontSize: `${dialogFont}rem`,
-            lineHeight: 1.6,
-            color: "var(--ink)",
-            textShadow: "2px 2px 0 var(--amber)",
-            letterSpacing: 1,
-          }}
-        >
-          {dialog1Active && (
-            <>
-              {dialog1}
-              <Caret />
-            </>
-          )}
-          {dialog2Active && (
-            <>
-              {dialog2}
-              <Caret />
-            </>
-          )}
-          {laughActive && (
-            <>
-              {laughText}
-              <Caret />
-            </>
-          )}
-        </motion.div>
-      )}
 
       {/* Team roulette */}
       {(mg.status === "roulette" || mg.status === "reveal") && (

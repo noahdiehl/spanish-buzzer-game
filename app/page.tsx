@@ -14,6 +14,15 @@ export default function PlayPage() {
   const { state, youAreTeamId, send, connected, error } = useGame("player");
   const [name, setName] = useState("");
   const [drawSubmitTrigger, setDrawSubmitTrigger] = useState(0);
+  const [viewportW, setViewportW] = useState(420);
+
+  // Track real viewport width on the client (avoids SSR/hydration mismatch).
+  useEffect(() => {
+    const update = () => setViewportW(window.innerWidth);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
 
   // Auto-submit drawing when the draw phase ends (status transitions to judging).
   useEffect(() => {
@@ -122,7 +131,7 @@ export default function PlayPage() {
 
         {state.phase === "minigame" && state.minigame?.kind === "geom" && (() => {
           const mg = state.minigame!;
-          const w = Math.min(420, typeof window !== "undefined" ? window.innerWidth - 32 : 420);
+          const w = Math.min(440, viewportW - 24);
           // Match host aspect ratio (900x520)
           const h = Math.round((w * 520) / 900);
           const myCube = mg.cubes.find((c) => c.teamId === youAreTeamId);
@@ -154,7 +163,7 @@ export default function PlayPage() {
         })()}
 
         {state.phase === "minigame" && state.minigame?.kind === "flappy" && (() => {
-          const w = Math.min(420, typeof window !== "undefined" ? window.innerWidth - 32 : 420);
+          const w = Math.min(440, viewportW - 24);
           // Match host aspect ratio (820x520)
           const h = Math.round((w * 520) / 820);
           return (
