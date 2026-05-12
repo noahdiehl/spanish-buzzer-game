@@ -118,12 +118,14 @@ export interface MinigameState {
   cubes: GeomCube[];
   obstacles: GeomObstacle[];
   // Felix-specific
-  felixHp: number;          // 0-100
+  felixHp: number;
   felixHpMax: number;
-  felixFlashUntilMs: number; // when red-flash should stop
-  felixShotsTotal: number;  // monotonic counter so client can detect shot events
+  felixFlashUntilMs: number;
+  felixShotsTotal: number;
   felixQuestion: string | null;
   felixBuzzedWrong: number[];
+  felixSavedQuestionMs: number; // remaining question time while paused for a buzz
+  felixRejectionsTotal: number; // monotonic — increments each Felix auto-reject
 }
 
 export interface GameState {

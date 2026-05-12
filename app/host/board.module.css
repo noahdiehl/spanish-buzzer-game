@@ -504,13 +504,14 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 32px;
+  gap: 18px;
   width: 100%;
   position: relative;
+  padding: 8px 0 20px;
 }
 .podiumTitle {
   font-family: 'Press Start 2P', monospace;
-  font-size: 3rem;
+  font-size: 2.4rem;
   letter-spacing: 8px;
   color: var(--amber);
   text-shadow: 6px 6px 0 var(--ink);

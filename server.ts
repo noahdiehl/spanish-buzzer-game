@@ -60,6 +60,7 @@ const FELIX_SHOT_COOLDOWN_MS = 140;
 const FELIX_SHOT_DAMAGE = 1;
 const FELIX_FLASH_MS = 130;
 const FELIX_CORRECT_BONUS = 10000;
+const FELIX_AUTO_REJECT_MS = 1100; // Felix auto-rejects this fast — host can't even click
 
 // === GEOMETRY DASH constants ===
 const GEOM_TICK_MS = 33;
@@ -259,6 +260,8 @@ function startFlappy() {
     felixShotsTotal: 0,
     felixQuestion: null,
     felixBuzzedWrong: [],
+    felixSavedQuestionMs: 0,
+    felixRejectionsTotal: 0,
   };
   state.minigame = mg;
   flappyPipeTimer = FLAPPY_PIPE_INTERVAL_MS - FLAPPY_FIRST_PIPE_DELAY_MS;
@@ -290,6 +293,8 @@ function startDraw() {
     felixShotsTotal: 0,
     felixQuestion: null,
     felixBuzzedWrong: [],
+    felixSavedQuestionMs: 0,
+    felixRejectionsTotal: 0,
   };
   state.minigame = mg;
 
@@ -333,6 +338,8 @@ function startGeom() {
     felixShotsTotal: 0,
     felixQuestion: null,
     felixBuzzedWrong: [],
+    felixSavedQuestionMs: 0,
+    felixRejectionsTotal: 0,
   };
   state.minigame = mg;
   geomObstacleId = 0;
@@ -589,6 +596,8 @@ function startFelix() {
     felixShotsTotal: 0,
     felixQuestion: null,
     felixBuzzedWrong: [],
+    felixSavedQuestionMs: 0,
+    felixRejectionsTotal: 0,
   };
   state.minigame = mg;
 
@@ -631,12 +640,25 @@ function felixTick() {
       mg.status = "shoot2";
       mg.countdownMs = FELIX_SHOOT2_MS;
       break;
-    case "questionBuzzed":
-      // Teacher hasn't judged in time — treat as a wrong skip and move on.
-      mg.status = "shoot2";
-      mg.countdownMs = FELIX_SHOOT2_MS;
+    case "questionBuzzed": {
+      // Felix slams the answer away — auto-reject (host can't beat him).
+      const winnerId = state.buzzedTeamId;
+      if (winnerId !== null && !mg.felixBuzzedWrong.includes(winnerId)) {
+        mg.felixBuzzedWrong.push(winnerId);
+      }
+      mg.felixRejectionsTotal += 1;
       state.buzzedTeamId = null;
+      const remaining = state.teams.length - mg.felixBuzzedWrong.length;
+      if (remaining <= 0) {
+        mg.status = "shoot2";
+        mg.countdownMs = FELIX_SHOOT2_MS;
+      } else {
+        mg.status = "questionPlay";
+        // Restore what was left of the play timer (minus a small penalty)
+        mg.countdownMs = Math.max(2000, mg.felixSavedQuestionMs - 500);
+      }
       break;
+    }
     case "shoot2":
       mg.status = "death";
       mg.countdownMs = FELIX_DEATH_MS;
@@ -1125,6 +1147,8 @@ function handleMessage(client: ClientInfo, msg: ClientMsg) {
         state.minigame.status === "questionPlay"
       ) {
         if (state.minigame.felixBuzzedWrong.includes(client.teamId)) return;
+        state.minigame.felixSavedQuestionMs = state.minigame.countdownMs;
+        state.minigame.countdownMs = FELIX_AUTO_REJECT_MS;
         state.minigame.status = "questionBuzzed";
         state.buzzedTeamId = client.teamId;
         return;

@@ -9,7 +9,7 @@ interface Props {
   mg: MinigameState;
   teams: Team[];
   isHost: boolean;
-  onJudge?: (correct: boolean) => void;
+  onJudge?: (correct: boolean) => void; // unused — Felix overrides
 }
 
 export function Felix({ mg, teams, isHost, onJudge }: Props) {
@@ -54,12 +54,17 @@ export function Felix({ mg, teams, isHost, onJudge }: Props) {
   const [armImpact, setArmImpact] = useState(false);
   useEffect(() => {
     if (mg.status === "questionThrow") {
-      // The arm slams at ~70% through the throw phase (~1.7s)
-      const id = setTimeout(() => setArmImpact(true), 1700);
-      const off = setTimeout(() => setArmImpact(false), 2050);
+      const id = setTimeout(() => setArmImpact(true), 1300);
+      const off = setTimeout(() => setArmImpact(false), 1700);
       return () => { clearTimeout(id); clearTimeout(off); };
     }
   }, [mg.status]);
+
+  // Wipe animation key — bumps each time Felix auto-rejects so the hand can flick.
+  const wipeKey = mg.felixRejectionsTotal;
+
+  // Hand is visible from the moment of the slap through the entire question phase.
+  const handVisible = isThrowing || isCountdown || isPlay || isBuzzed;
 
   // Auto play-area dims based on isHost
   const robotW = isHost ? "min(640px, 60vw)" : "min(320px, 84vw)";
@@ -248,34 +253,54 @@ export function Felix({ mg, teams, isHost, onJudge }: Props) {
         ))}
       </AnimatePresence>
 
-      {/* === GIANT THROWING ARM (during questionThrow only) === */}
+      {/* === GIANT HAND: raises up, slaps down, then covers the screen === */}
       <AnimatePresence>
-        {isThrowing && (
+        {handVisible && (
           <motion.div
-            key="arm"
-            initial={{ x: "120%", rotate: -25, scale: 0.8 }}
-            animate={{
-              x: ["120%", "30%", "10%", "-15%", "120%"],
-              rotate: [-25, -15, -8, 8, -25],
-              scale: [0.8, 1.0, 1.05, 1.4, 0.8],
-            }}
-            transition={{
-              duration: 2.4,
-              times: [0, 0.3, 0.5, 0.72, 1],
-              ease: ["easeOut", "easeInOut", "easeIn", "easeOut"],
-            }}
+            key={`hand-${wipeKey}`}
+            initial={
+              isThrowing
+                ? { y: "-110%", rotate: -20, scale: 1.3 }
+                : { y: 0, rotate: 0, scale: 1 }
+            }
+            animate={
+              isThrowing
+                ? {
+                    y: ["-110%", "-60%", "10%", "0%"],
+                    rotate: [-20, -10, 8, 0],
+                    scale: [1.3, 1.35, 1.55, 1.5],
+                  }
+                : isBuzzed
+                ? {
+                    // Felix wipes the answer away — quick swipe right + tilt
+                    x: [0, 80, -40, 0],
+                    rotate: [0, 12, -6, 0],
+                    scale: [1.5, 1.55, 1.5, 1.5],
+                    y: [0, -20, 0, 0],
+                  }
+                : { y: 0, rotate: 0, scale: 1.5 }
+            }
+            exit={{ y: "120%", rotate: 25, scale: 1.0, transition: { duration: 0.5 } }}
+            transition={
+              isThrowing
+                ? { duration: 1.7, times: [0, 0.35, 0.75, 1], ease: "easeIn" }
+                : isBuzzed
+                ? { duration: 0.7, times: [0, 0.3, 0.7, 1], ease: "easeOut" }
+                : { duration: 0.3, ease: "easeOut" }
+            }
             style={{
               position: "absolute",
-              right: 0,
-              top: "20%",
-              width: isHost ? 700 : 360,
-              height: isHost ? 280 : 140,
-              transformOrigin: "right center",
+              left: "50%",
+              top: "30%",
+              width: isHost ? "min(1000px, 90vw)" : "min(440px, 95vw)",
+              height: isHost ? "min(720px, 70vh)" : "min(380px, 60vh)",
+              transform: "translateX(-50%)",
               pointerEvents: "none",
-              filter: "drop-shadow(-8px 12px 0 rgba(0,0,0,0.6)) drop-shadow(0 0 30px rgba(255, 50, 80, 0.6))",
+              filter: "drop-shadow(0 18px 0 rgba(0,0,0,0.6)) drop-shadow(0 0 60px rgba(255, 50, 80, 0.7))",
+              zIndex: 6,
             }}
           >
-            <RobotArm isHost={isHost} />
+            <GiantPalm />
           </motion.div>
         )}
       </AnimatePresence>
@@ -366,7 +391,7 @@ export function Felix({ mg, teams, isHost, onJudge }: Props) {
               textAlign: "center",
               fontWeight: 700,
               letterSpacing: 1,
-              zIndex: 7,
+              zIndex: 9,
             }}
           >
             {/* corner rivets */}
@@ -415,38 +440,28 @@ export function Felix({ mg, teams, isHost, onJudge }: Props) {
         </div>
       )}
 
-      {/* Buzzed: judge buttons */}
-      {isBuzzed && isHost && (
-        <div
+      {/* Felix auto-rejects every buzz — show a "NO!" stamp */}
+      {isBuzzed && (
+        <motion.div
+          initial={{ scale: 0, rotate: -25, opacity: 0 }}
+          animate={{ scale: 1.3, rotate: -8, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 380, damping: 12 }}
           style={{
             position: "absolute",
-            top: "60%",
+            top: "44%",
             left: "50%",
-            transform: "translateX(-50%)",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            gap: 18,
-            zIndex: 8,
-            pointerEvents: "auto",
+            transform: "translate(-50%, -50%)",
+            fontFamily: "Press Start 2P, monospace",
+            fontSize: isHost ? "9rem" : "4rem",
+            color: "#ff2a4a",
+            textShadow: "6px 6px 0 #2e2418, 0 0 80px #ff2a4a, 0 0 160px #ff5577",
+            letterSpacing: 6,
+            zIndex: 10,
+            pointerEvents: "none",
           }}
         >
-          <div
-            style={{
-              fontFamily: "Press Start 2P, monospace",
-              fontSize: "1.6rem",
-              color: "#fff",
-              textShadow: "3px 3px 0 #2e2418, 0 0 18px #ff2a4a",
-              letterSpacing: 3,
-            }}
-          >
-            BUZZED
-          </div>
-          <div style={{ display: "flex", gap: 22 }}>
-            <button className="success" onClick={() => onJudge?.(true)}>✓ CORRECTO</button>
-            <button className="danger" onClick={() => onJudge?.(false)}>✗ FALSO (NO!)</button>
-          </div>
-        </div>
+          NO!
+        </motion.div>
       )}
 
       {(mg.status === "death" || mg.status === "felixOver") && (
@@ -688,6 +703,71 @@ function RobotBody({ isHost }: { isHost: boolean }) {
         />
       </div>
     </div>
+  );
+}
+
+// ----- GIANT PALM (slap + covers screen) -----
+function GiantPalm() {
+  return (
+    <svg viewBox="0 0 100 110" preserveAspectRatio="xMidYMid meet" style={{ width: "100%", height: "100%" }}>
+      <defs>
+        <linearGradient id="palmGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#7a7a88" />
+          <stop offset="60%" stopColor="#3a3a45" />
+          <stop offset="100%" stopColor="#1a1a22" />
+        </linearGradient>
+        <linearGradient id="fingerGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#888896" />
+          <stop offset="100%" stopColor="#2a2a35" />
+        </linearGradient>
+      </defs>
+
+      {/* Fingers (4 + thumb) */}
+      {[16, 32, 48, 64].map((x, i) => (
+        <g key={i}>
+          <rect x={x} y={6} width={12} height={36} rx={6} fill="url(#fingerGrad)" stroke="#0a0a12" strokeWidth={1.2} />
+          {/* knuckle line */}
+          <rect x={x + 1} y={14} width={10} height={2.2} fill="#0a0a12" opacity={0.6} />
+          <rect x={x + 1} y={26} width={10} height={2.2} fill="#0a0a12" opacity={0.6} />
+        </g>
+      ))}
+      {/* Thumb */}
+      <rect x={78} y={28} width={14} height={28} rx={6} fill="url(#fingerGrad)" stroke="#0a0a12" strokeWidth={1.2} transform="rotate(28 85 42)" />
+
+      {/* Palm */}
+      <rect x={10} y={40} width={70} height={56} rx={12} fill="url(#palmGrad)" stroke="#0a0a12" strokeWidth={1.5} />
+
+      {/* Hazard stripe across palm */}
+      <rect x={14} y={56} width={62} height={6} fill="#fff700" stroke="#0a0a12" strokeWidth={0.6} />
+      <rect x={14} y={56} width={62} height={6} fill="url(#hazPat)" />
+      <pattern id="hazPat" patternUnits="userSpaceOnUse" width="6" height="6" patternTransform="rotate(45)">
+        <rect width="3" height="6" fill="#1a1a22" />
+        <rect x="3" width="3" height="6" fill="#fff700" />
+      </pattern>
+
+      {/* Red glowing core in palm */}
+      <circle cx={45} cy={76} r={8} fill="#ff2a4a" stroke="#0a0a12" strokeWidth={1.2}>
+        <animate attributeName="r" values="7;9;7" dur="1.2s" repeatCount="indefinite" />
+      </circle>
+      <circle cx={45} cy={76} r={4} fill="#fff" opacity={0.8} />
+
+      {/* Rivets */}
+      {[
+        [18, 46], [70, 46], [18, 90], [70, 90],
+        [44, 46], [44, 90],
+      ].map(([cx, cy], i) => (
+        <circle key={i} cx={cx} cy={cy} r={2.2} fill="#aaa" stroke="#0a0a12" strokeWidth={0.5} />
+      ))}
+
+      {/* Heat vents at bottom */}
+      <g>
+        {[0, 1, 2].map((i) => (
+          <rect key={i} x={20 + i * 18} y={92} width={12} height={4} rx={1} fill="#ff2a4a" opacity={0.85}>
+            <animate attributeName="opacity" values="0.6;1;0.6" dur="0.9s" repeatCount="indefinite" />
+          </rect>
+        ))}
+      </g>
+    </svg>
   );
 }
 

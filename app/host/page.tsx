@@ -30,6 +30,7 @@ export default function MainBoard() {
   const blipCtxRef = useRef<AudioContext | null>(null);
   const prevFelixShotsRef = useRef(0);
   const prevFelixStatusRef = useRef<string | null>(null);
+  const prevFelixRejectsRef = useRef(0);
   const wheelLastSegRef = useRef<number>(-1);
   const wheelRafRef = useRef<number>(0);
 
@@ -120,19 +121,47 @@ export default function MainBoard() {
     }
   }, [state?.minigame?.status, state?.minigame?.kind, state?.minigame, state?.teams]);
 
-  // Random voice lines during shoot phases
+  // Random voice lines during shoot phases — more frequent + more variety
   useEffect(() => {
     const status = state?.minigame?.kind === "felix" ? state.minigame.status : null;
     if (status !== "shoot1" && status !== "shoot2") return;
-    const lines = status === "shoot1"
-      ? ["/sounds/felix_iam.mp3", "/sounds/felix_dontlike.mp3", "/sounds/felix_laugh.mp3", "/sounds/felix_laugh.mp3"]
-      : ["/sounds/felix_stop.mp3", "/sounds/felix_actuallystop.mp3", "/sounds/felix_laugh.mp3"];
+    const shoot1Lines = [
+      "/sounds/felix_iam.mp3",
+      "/sounds/felix_iam.mp3",
+      "/sounds/felix_dontlike.mp3",
+      "/sounds/felix_dontlike.mp3",
+      "/sounds/felix_laugh.mp3",
+      "/sounds/felix_laugh.mp3",
+      "/sounds/felix_laugh.mp3",
+    ];
+    const shoot2Lines = [
+      "/sounds/felix_stop.mp3",
+      "/sounds/felix_actuallystop.mp3",
+      "/sounds/felix_stop.mp3",
+      "/sounds/felix_laugh.mp3",
+      "/sounds/felix_laugh.mp3",
+    ];
+    const lines = status === "shoot1" ? shoot1Lines : shoot2Lines;
     const id = setInterval(() => {
       const pick = lines[Math.floor(Math.random() * lines.length)];
-      playSfx(pick, 0.95);
-    }, 3200);
+      playSfx(pick, 1);
+    }, 2100);
     return () => clearInterval(id);
   }, [state?.minigame?.status, state?.minigame?.kind]);
+
+  // Felix yells / laughs on every rejection (auto-judge)
+  useEffect(() => {
+    const total = (state?.minigame?.kind === "felix" ? state.minigame.felixRejectionsTotal : 0) ?? 0;
+    if (total > prevFelixRejectsRef.current) {
+      prevFelixRejectsRef.current = total;
+      // Quick slap + laugh combo
+      playSfx("/sounds/slap.mp3", 0.95);
+      setTimeout(() => {
+        const pool = ["/sounds/felix_laugh.mp3", "/sounds/felix_dontlike.mp3", "/sounds/felix_laugh.mp3"];
+        playSfx(pool[Math.floor(Math.random() * pool.length)], 1);
+      }, 200);
+    }
+  }, [state?.minigame, state?.minigame?.kind]);
 
   // Late-shoot1 transition warnings: when HP gets low, switch random pool to "stop"
   useEffect(() => {
@@ -215,7 +244,7 @@ export default function MainBoard() {
   useEffect(() => {
     const audio = flappyMusicRef.current;
     if (!audio) return;
-    if (state?.phase === "minigame") {
+    if (state?.phase === "minigame" && state.minigame?.kind === "flappy") {
       audio.volume = 0.6;
       if (audio.paused) {
         audio.currentTime = 5;
@@ -225,7 +254,7 @@ export default function MainBoard() {
       if (!audio.paused) audio.pause();
       audio.currentTime = 5;
     }
-  }, [state?.phase]);
+  }, [state?.phase, state?.minigame?.kind]);
 
   // Nuclear countdown audio: starts 3 sec before the 9-sec danger window (timerMs <= 12000)
   // so the 3-sec intro plays and the actual countdown audio aligns with timerMs <= 9000.
@@ -501,7 +530,7 @@ export default function MainBoard() {
             <div className={styles.podium}>
               {[1, 0, 2].map((rank) => {
                 const t = podium[rank];
-                const heights = ["260px", "360px", "180px"];
+                const heights = ["22vh", "30vh", "16vh"];
                 const labels = ["2nd", "1st", "3rd"];
                 const medals = ["🥈", "🥇", "🥉"];
                 // Reveal in reverse order of place: 3rd first, then 2nd, then 1st
