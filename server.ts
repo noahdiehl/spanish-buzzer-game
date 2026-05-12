@@ -45,7 +45,7 @@ const MINIGAME_CYCLE: ("flappy" | "draw" | "banana" | "geom" | "felix")[] = [
 ];
 
 // === DESTROY FELIX constants ===
-const FELIX_TICK_MS = 33;
+const FELIX_TICK_MS = 60;
 const FELIX_INTRO_MS = 1800;
 const FELIX_SHOOT1_MS = 14000;
 const FELIX_QUESTION_THROW_MS = 2400;

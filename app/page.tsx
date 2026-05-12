@@ -362,7 +362,10 @@ export default function PlayPage() {
           <div className={styles.center}>
             <div className={styles.subtitle}>GAME OVER</div>
             <div className={styles.endedScores}>
-              {[...state.teams].sort((a, b) => b.score - a.score).map((t, idx) => (
+              {[...state.teams]
+                .filter((t) => t.connected || t.score !== 0)
+                .sort((a, b) => b.score - a.score)
+                .map((t, idx) => (
                 <div
                   key={t.id}
                   className={styles.endedRow}
