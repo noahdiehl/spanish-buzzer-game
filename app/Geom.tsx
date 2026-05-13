@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import type { MinigameState, Team } from "@/lib/types";
 
 const TEAM_COLORS = ["#e07a5f", "#4a9b8e", "#d4a13a", "#9b5c8f"];
-const TEAM_HUE_ROTATE = [-40, 110, 0, 260];
+// Different Marco picture per team so they can tell who's who without hue distortion.
+const TEAM_FACE = ["/marco/marco1.png", "/marco/marco2.png", "/marco/study.png", "/marco/good.png"];
 
 const CUBE_W = 0.06;
 const CUBE_H = 0.10;
@@ -272,7 +273,7 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
         const team = teams.find((t) => t.id === c.teamId);
         if (!team) return null;
         const color = TEAM_COLORS[c.teamId];
-        const hue = TEAM_HUE_ROTATE[c.teamId] ?? 0;
+        const face = TEAM_FACE[c.teamId] ?? "/marco/marco1.png";
         // c.y is BOTTOM of the cube in world coords (0 = ground)
         const cubeBottomScreen = worldY(c.y);
         const cubeTop = cubeBottomScreen - cubeHPx;
@@ -306,7 +307,7 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
                   height: cubeHPx,
                   transform: `rotate(${c.rotation}deg)`,
                   transformOrigin: "center",
-                  filter: `hue-rotate(${hue}deg)${highlight ? " drop-shadow(0 0 12px rgba(255,255,255,0.9))" : ""}`,
+                  filter: highlight ? "drop-shadow(0 0 12px rgba(255,255,255,0.9))" : undefined,
                   border: highlight
                     ? "4px solid rgba(255,255,255,0.85)"
                     : "3px solid #2e2418",
@@ -321,7 +322,7 @@ export function Geom({ mg, teams, highlightTeamId, width, height }: Props) {
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src="/marco/flappy.png"
+                  src={face}
                   alt=""
                   style={{
                     width: "100%",

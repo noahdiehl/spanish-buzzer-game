@@ -63,7 +63,7 @@ const FELIX_CORRECT_BONUS = 10000;
 const FELIX_AUTO_REJECT_MS = 1100; // Felix auto-rejects this fast — host can't even click
 
 // === GEOMETRY DASH constants ===
-const GEOM_TICK_MS = 33;
+const GEOM_TICK_MS = 50;
 const GEOM_INTRO_MS = 3000;
 const GEOM_MAX_MS = 60000;
 const GEOM_GRAVITY = 4.2;            // per second (downward)
@@ -612,6 +612,22 @@ function felixTick() {
   if (!mg || mg.kind !== "felix") return;
   mg.elapsedMs += FELIX_TICK_MS;
   mg.countdownMs -= FELIX_TICK_MS;
+
+  // HP-driven transitions take priority over timers — players actually killing
+  // him feels way better than a wall-clock cutoff.
+  if (mg.status === "shoot1" && mg.felixHp <= FELIX_HP_FLOOR_SHOOT1) {
+    mg.status = "questionThrow";
+    mg.countdownMs = FELIX_QUESTION_THROW_MS;
+    mg.felixQuestion = QUESTIONS[state.questionIdx] ?? "(no question)";
+    return;
+  }
+  if (mg.status === "shoot2" && mg.felixHp <= 0) {
+    mg.status = "death";
+    mg.countdownMs = FELIX_DEATH_MS;
+    mg.felixHp = 0;
+    return;
+  }
+
   if (mg.countdownMs > 0) return;
 
   // Phase transition

@@ -151,12 +151,87 @@ export default function PlayPage() {
         {state.phase === "minigame" && state.minigame?.kind === "felix" && (() => {
           const mg = state.minigame!;
           const isShoot = mg.status === "shoot1" || mg.status === "shoot2";
+          const isCountdown = mg.status === "questionCountdown";
           const isPlay = mg.status === "questionPlay";
+          const isBuzzed = mg.status === "questionBuzzed";
+          const isThrowing = mg.status === "questionThrow";
           const buzzedWrong = mg.felixBuzzedWrong?.includes(youAreTeamId!) ?? false;
+          const isMyBuzz = state.buzzedTeamId === youAreTeamId;
+          // Question phases: keep the question on the host only. Players just see
+          // a red flashing BUZZ screen, exactly like a normal buzz round.
+          const isQuestionPhase = isThrowing || isCountdown || isPlay || isBuzzed;
+          if (isQuestionPhase) {
+            return (
+              <div
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  zIndex: 60000,
+                  background: "radial-gradient(circle at 50% 40%, #ff2a4a 0%, #b00020 60%, #4a0010 100%)",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 24,
+                  padding: 24,
+                  pointerEvents: "none",
+                  animation: isPlay && !buzzedWrong ? "felixBuzzPulse 0.7s ease-in-out infinite" : undefined,
+                }}
+              >
+                <style>{`
+                  @keyframes felixBuzzPulse {
+                    0%, 100% { filter: brightness(1); }
+                    50% { filter: brightness(1.35); }
+                  }
+                `}</style>
+                {isThrowing && (
+                  <div style={{ fontFamily: "Press Start 2P, monospace", fontSize: "1.6rem", color: "#fff", textShadow: "3px 3px 0 #2e2418", letterSpacing: 4, textAlign: "center" }}>
+                    GET READY...
+                  </div>
+                )}
+                {isCountdown && (
+                  <div style={{ fontFamily: "Press Start 2P, monospace", fontSize: "8rem", color: "#fff", textShadow: "5px 5px 0 #2e2418, 0 0 40px #fff", lineHeight: 1 }}>
+                    {Math.max(1, Math.ceil(mg.countdownMs / 1000))}
+                  </div>
+                )}
+                {isPlay && !buzzedWrong && (
+                  <motion.button
+                    onClick={() => send({ type: "buzz" })}
+                    whileTap={{ scale: 0.92 }}
+                    style={{
+                      pointerEvents: "auto",
+                      background: "#fff700",
+                      color: "#2e2418",
+                      border: "6px solid #2e2418",
+                      borderRadius: 24,
+                      padding: "44px 88px",
+                      fontFamily: "Press Start 2P, monospace",
+                      fontSize: "2.4rem",
+                      letterSpacing: 8,
+                      boxShadow: "0 10px 0 0 #2e2418, 0 0 50px #fff700",
+                      cursor: "pointer",
+                    }}
+                  >
+                    BUZZ
+                  </motion.button>
+                )}
+                {isPlay && buzzedWrong && (
+                  <div style={{ fontFamily: "Press Start 2P, monospace", fontSize: "1.3rem", color: "#fff", textShadow: "3px 3px 0 #2e2418", letterSpacing: 3, textAlign: "center", padding: 16 }}>
+                    FELIX SAID NO<br/>LOCKED OUT
+                  </div>
+                )}
+                {isBuzzed && (
+                  <div style={{ fontFamily: "Press Start 2P, monospace", fontSize: "2.4rem", color: "#fff", textShadow: "4px 4px 0 #2e2418", letterSpacing: 6 }}>
+                    {isMyBuzz ? "SUBMITTED" : "FELIX REJECTS!"}
+                  </div>
+                )}
+              </div>
+            );
+          }
           return (
             <>
               <Felix mg={mg} teams={state.teams} isHost={false} />
-              {(isShoot || isPlay) && (
+              {isShoot && (
                 <div
                   style={{
                     position: "fixed",
@@ -169,65 +244,25 @@ export default function PlayPage() {
                     pointerEvents: "none",
                   }}
                 >
-                  {isShoot && (
-                    <motion.button
-                      onClick={() => send({ type: "shoot" })}
-                      whileTap={{ scale: 0.92 }}
-                      style={{
-                        pointerEvents: "auto",
-                        background: "#ff2a4a",
-                        color: "#fff",
-                        border: "4px solid #2e2418",
-                        borderRadius: 18,
-                        padding: "22px 48px",
-                        fontFamily: "Press Start 2P, monospace",
-                        fontSize: "1.4rem",
-                        letterSpacing: 4,
-                        boxShadow: "0 8px 0 0 #2e2418, 0 0 30px #ff2a4a",
-                        cursor: "pointer",
-                      }}
-                    >
-                      SHOOT
-                    </motion.button>
-                  )}
-                  {isPlay && !buzzedWrong && (
-                    <motion.button
-                      onClick={() => send({ type: "buzz" })}
-                      whileTap={{ scale: 0.92 }}
-                      style={{
-                        pointerEvents: "auto",
-                        background: "#fff700",
-                        color: "#2e2418",
-                        border: "4px solid #2e2418",
-                        borderRadius: 18,
-                        padding: "22px 48px",
-                        fontFamily: "Press Start 2P, monospace",
-                        fontSize: "1.4rem",
-                        letterSpacing: 4,
-                        boxShadow: "0 8px 0 0 #2e2418, 0 0 30px #fff700",
-                        cursor: "pointer",
-                      }}
-                    >
-                      BUZZ
-                    </motion.button>
-                  )}
-                  {isPlay && buzzedWrong && (
-                    <div
-                      style={{
-                        pointerEvents: "none",
-                        background: "#2e2418",
-                        color: "#ff2a4a",
-                        border: "3px solid #ff2a4a",
-                        borderRadius: 14,
-                        padding: "14px 28px",
-                        fontFamily: "Press Start 2P, monospace",
-                        fontSize: "0.9rem",
-                        letterSpacing: 3,
-                      }}
-                    >
-                      LOCKED OUT — FELIX SAID NO
-                    </div>
-                  )}
+                  <motion.button
+                    onClick={() => send({ type: "shoot" })}
+                    whileTap={{ scale: 0.92 }}
+                    style={{
+                      pointerEvents: "auto",
+                      background: "#ff2a4a",
+                      color: "#fff",
+                      border: "4px solid #2e2418",
+                      borderRadius: 18,
+                      padding: "22px 48px",
+                      fontFamily: "Press Start 2P, monospace",
+                      fontSize: "1.4rem",
+                      letterSpacing: 4,
+                      boxShadow: "0 8px 0 0 #2e2418, 0 0 30px #ff2a4a",
+                      cursor: "pointer",
+                    }}
+                  >
+                    SHOOT
+                  </motion.button>
                 </div>
               )}
             </>

@@ -31,45 +31,26 @@ export default function MainBoard() {
   const prevFelixShotsRef = useRef(0);
   const prevFelixStatusRef = useRef<string | null>(null);
   const prevFelixRejectsRef = useRef(0);
-  // Voice queue: ensures voice lines never overlap and Felix runs through
-  // every file before repeating any.
-  const voiceQueueRef = useRef<string[]>([]);
-  const voiceDeckRef = useRef<string[]>([]);
-  const voicePlayingRef = useRef(false);
-  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+  const felixVoiceElRef = useRef<HTMLAudioElement | null>(null);
 
-  function enqueueVoice(file: string) {
-    voiceQueueRef.current.push(file);
-    if (!voicePlayingRef.current) playNextVoice();
-  }
-  function playNextVoice() {
-    const file = voiceQueueRef.current.shift();
-    if (!file) {
-      voicePlayingRef.current = false;
-      return;
+  // Play a voice line on the shared <audio> element so it reliably plays
+  // (avoids autoplay edge cases with new Audio() chains).
+  function playVoice(file: string) {
+    const el = felixVoiceElRef.current;
+    if (!el) return;
+    try {
+      el.pause();
+      el.src = file;
+      el.currentTime = 0;
+      el.volume = 1;
+      el.play().catch((err) => console.warn("voice play failed", file, err));
+    } catch (e) {
+      console.warn("voice err", e);
     }
-    voicePlayingRef.current = true;
-    const a = new Audio(file);
-    voiceAudioRef.current = a;
-    a.volume = 1;
-    a.onended = () => playNextVoice();
-    a.onerror = () => playNextVoice();
-    a.play().catch(() => playNextVoice());
-  }
-  function takeFromDeck(pool: string[]): string {
-    if (voiceDeckRef.current.length === 0) {
-      voiceDeckRef.current = [...pool].sort(() => Math.random() - 0.5);
-    }
-    return voiceDeckRef.current.shift()!;
   }
   function stopVoice() {
-    voiceQueueRef.current = [];
-    voiceDeckRef.current = [];
-    voicePlayingRef.current = false;
-    if (voiceAudioRef.current) {
-      voiceAudioRef.current.pause();
-      voiceAudioRef.current = null;
-    }
+    const el = felixVoiceElRef.current;
+    if (el) { el.pause(); el.removeAttribute("src"); el.load(); }
   }
   const wheelLastSegRef = useRef<number>(-1);
   const wheelRafRef = useRef<number>(0);
@@ -128,53 +109,36 @@ export default function MainBoard() {
     }
   }, [state?.phase, state?.minigame?.kind, state?.minigame?.status]);
 
-  // Felix status-triggered voice lines + sounds (one-shots, status transitions)
+  // Felix status-triggered voice lines (one-shots on status transitions)
   useEffect(() => {
     const status = state?.minigame?.kind === "felix" ? state.minigame.status : null;
     const prev = prevFelixStatusRef.current;
     prevFelixStatusRef.current = status ?? null;
     if (status === prev) return;
     if (status === "intro") {
-      // Reset queue and start with iconic "I am Felix"
-      voiceQueueRef.current = [];
-      voiceDeckRef.current = [];
-      enqueueVoice("/sounds/felix_iam.mp3");
+      playVoice("/sounds/felix_iam.mp3");
     } else if (status === "questionThrow") {
-      // Slap is non-voice SFX, plays directly
       playSfx("/sounds/slap.mp3", 1);
     } else if (status === "questionCountdown") {
       playSfx("/sounds/epic_countdown.mp3", 1);
       setTimeout(() => playSfx("/sounds/epic_countdown.mp3", 1), 1000);
       setTimeout(() => playSfx("/sounds/epic_countdown.mp3", 1), 2000);
     } else if (status === "shoot2") {
-      // Detect the transition source
       if (prev === "questionPlay" || prev === "questionBuzzed") {
         const mg = state?.minigame;
         if (mg && mg.kind === "felix") {
           const allWrong = (mg.felixBuzzedWrong?.length ?? 0) >= state.teams.length;
-          if (allWrong) {
-            // Clear any pending voice and play the big "NO ONE WINS" reveal
-            voiceQueueRef.current = [];
-            voiceDeckRef.current = [];
-            if (voiceAudioRef.current) voiceAudioRef.current.pause();
-            voicePlayingRef.current = false;
-            enqueueVoice("/sounds/felix_noonewins.mp3");
-          }
+          if (allWrong) playVoice("/sounds/felix_noonewins.mp3");
         }
       }
     } else if (status === "death") {
-      // Stop everything and play death line cleanly
-      voiceQueueRef.current = [];
-      voiceDeckRef.current = [];
-      if (voiceAudioRef.current) voiceAudioRef.current.pause();
-      voicePlayingRef.current = false;
-      enqueueVoice("/sounds/felix_dies.mp3");
+      playVoice("/sounds/felix_dies.mp3");
     } else if (status === "felixOver" || status === null) {
       stopVoice();
     }
   }, [state?.minigame?.status, state?.minigame?.kind, state?.minigame, state?.teams]);
 
-  // Keep voice queue topped up during shoot phases — Felix never shuts up.
+  // Rotate voice lines during shoot phases — every 2.4s pick the next file.
   useEffect(() => {
     const status = state?.minigame?.kind === "felix" ? state.minigame.status : null;
     if (status !== "shoot1" && status !== "shoot2") return;
@@ -189,21 +153,25 @@ export default function MainBoard() {
       "/sounds/felix_laugh.mp3",
     ];
     const pool = status === "shoot1" ? shoot1Pool : shoot2Pool;
-    const id = setInterval(() => {
-      if (voiceQueueRef.current.length < 1) {
-        enqueueVoice(takeFromDeck(pool));
-      }
-    }, 400);
-    return () => clearInterval(id);
+    let idx = 0;
+    const fire = () => {
+      const file = pool[idx % pool.length];
+      idx += 1;
+      playVoice(file);
+    };
+    // First line ~600ms in so it doesn't overlap the intro/throw line
+    const t0 = setTimeout(fire, 600);
+    const id = setInterval(fire, 2400);
+    return () => { clearTimeout(t0); clearInterval(id); };
   }, [state?.minigame?.status, state?.minigame?.kind]);
 
-  // Felix slap+laugh on every rejection (auto-judge)
+  // Felix slap + laugh on every rejection
   useEffect(() => {
     const total = (state?.minigame?.kind === "felix" ? state.minigame.felixRejectionsTotal : 0) ?? 0;
     if (total > prevFelixRejectsRef.current) {
       prevFelixRejectsRef.current = total;
       playSfx("/sounds/slap.mp3", 1);
-      enqueueVoice("/sounds/felix_laugh.mp3");
+      setTimeout(() => playVoice("/sounds/felix_laugh.mp3"), 180);
     }
   }, [state?.minigame, state?.minigame?.kind]);
 
@@ -915,6 +883,8 @@ export default function MainBoard() {
       <audio ref={bananaMusicRef} src="/sounds/banana.mp3" preload="auto" />
       {/* Felix boss music */}
       <audio ref={felixMusicRef} src="/sounds/felix_music.mp3" preload="auto" />
+      {/* Felix voice line element (changes src on each line) */}
+      <audio ref={felixVoiceElRef} preload="auto" />
 
       {/* Banana event overlay */}
       {state.phase === "minigame" && state.minigame?.kind === "banana" && (
