@@ -373,9 +373,9 @@ export function Felix({ mg, teams, isHost }: Props) {
             transition={{ type: "spring", stiffness: 220, damping: 16 }}
             style={{
               position: "absolute",
-              top: "22%",
+              top: "50%",
               left: "50%",
-              transform: "translateX(-50%)",
+              transform: "translate(-50%, -50%)",
               background: "linear-gradient(180deg, #2a0a18 0%, #4a0820 100%)",
               border: "5px solid #ff2a4a",
               borderRadius: 22,
@@ -423,7 +423,7 @@ export function Felix({ mg, teams, isHost }: Props) {
         <div
           style={{
             position: "absolute",
-            top: "62%",
+            top: "72%",
             left: 0,
             right: 0,
             textAlign: "center",

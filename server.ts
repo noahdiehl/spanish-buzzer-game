@@ -51,7 +51,7 @@ const FELIX_SHOOT1_MS = 14000;
 const FELIX_QUESTION_THROW_MS = 2400;
 const FELIX_QUESTION_COUNTDOWN_MS = 3200;
 const FELIX_QUESTION_MAX_MS = 15000;
-const FELIX_SHOOT2_MS = 6000;
+const FELIX_SHOOT2_MS = 8000;
 const FELIX_DEATH_MS = 2800;
 const FELIX_OVER_MS = 800;
 const FELIX_HP_MAX = 600;
@@ -613,19 +613,27 @@ function felixTick() {
   mg.elapsedMs += FELIX_TICK_MS;
   mg.countdownMs -= FELIX_TICK_MS;
 
-  // HP-driven transitions take priority over timers — players actually killing
-  // him feels way better than a wall-clock cutoff.
+  // HP-driven transitions take priority over timers.
   if (mg.status === "shoot1" && mg.felixHp <= FELIX_HP_FLOOR_SHOOT1) {
     mg.status = "questionThrow";
     mg.countdownMs = FELIX_QUESTION_THROW_MS;
     mg.felixQuestion = QUESTIONS[state.questionIdx] ?? "(no question)";
     return;
   }
-  if (mg.status === "shoot2" && mg.felixHp <= 0) {
-    mg.status = "death";
-    mg.countdownMs = FELIX_DEATH_MS;
-    mg.felixHp = 0;
-    return;
+  // During shoot2: bleed HP automatically toward 0 in lock-step with the timer
+  // so the bar finishes empty exactly when Felix dies — works regardless of
+  // how many players are shooting. Their shots accelerate the drain.
+  if (mg.status === "shoot2") {
+    const elapsed = FELIX_SHOOT2_MS - mg.countdownMs;
+    const fracElapsed = Math.max(0, Math.min(1, elapsed / FELIX_SHOOT2_MS));
+    const naturalHp = FELIX_HP_FLOOR_SHOOT1 * (1 - fracElapsed);
+    if (mg.felixHp > naturalHp) mg.felixHp = naturalHp;
+    if (mg.felixHp <= 0) {
+      mg.status = "death";
+      mg.countdownMs = FELIX_DEATH_MS;
+      mg.felixHp = 0;
+      return;
+    }
   }
 
   if (mg.countdownMs > 0) return;

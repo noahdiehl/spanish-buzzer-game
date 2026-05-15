@@ -15,6 +15,10 @@ interface Props {
 
 function useTypewriter(text: string, active: boolean, charMs: number, onBlip?: () => void) {
   const [shown, setShown] = useState(0);
+  // Stash the unstable callback in a ref so it doesn't bust the effect deps
+  // and reset the typewriter on every parent re-render.
+  const onBlipRef = useRef(onBlip);
+  useEffect(() => { onBlipRef.current = onBlip; }, [onBlip]);
   useEffect(() => {
     if (!active) {
       setShown(0);
@@ -25,11 +29,11 @@ function useTypewriter(text: string, active: boolean, charMs: number, onBlip?: (
     const id = setInterval(() => {
       i += 1;
       setShown(i);
-      if (onBlip && text[i - 1] !== " ") onBlip();
+      if (onBlipRef.current && text[i - 1] !== " ") onBlipRef.current();
       if (i >= text.length) clearInterval(id);
     }, charMs);
     return () => clearInterval(id);
-  }, [text, active, charMs, onBlip]);
+  }, [text, active, charMs]);
   return text.slice(0, shown);
 }
 
