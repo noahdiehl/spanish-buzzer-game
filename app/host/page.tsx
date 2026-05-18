@@ -752,27 +752,28 @@ export default function MainBoard() {
 
         {(state.phase === "question" || state.phase === "buzzed") && (
           <>
-            <AnimatePresence mode="wait">
-              {state.phase === "question" && (
-                <motion.div
-                  key="q"
-                  className={styles.question}
-                  initial={{ opacity: 0, y: 30 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.5 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  {state.question}
-                </motion.div>
-              )}
+            {/* Question stays visible during buzzed — shrinks and moves up so people can read it while answering out loud */}
+            <motion.div
+              className={styles.question}
+              initial={{ opacity: 0, y: 30 }}
+              animate={{
+                opacity: 1,
+                y: state.phase === "buzzed" ? -40 : 0,
+                scale: state.phase === "buzzed" ? 0.75 : 1,
+              }}
+              transition={{ type: "spring", stiffness: 220, damping: 22 }}
+            >
+              {state.question}
+            </motion.div>
 
+            <AnimatePresence>
               {state.phase === "buzzed" && (
                 <motion.div
                   key="buzzed"
                   className={styles.buzzed}
                   initial={{ scale: 0.2, opacity: 0, rotate: -8 }}
                   animate={{ scale: 1, opacity: 1, rotate: 0 }}
-                  exit={{ opacity: 0 }}
+                  exit={{ opacity: 0, scale: 0.6 }}
                   transition={{ type: "spring", stiffness: 500, damping: 18 }}
                 >
                   <div className={styles.buzzedLabel}>BUZZED IN</div>

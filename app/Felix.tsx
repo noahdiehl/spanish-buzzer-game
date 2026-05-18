@@ -447,11 +447,11 @@ export function Felix({ mg, teams, isHost }: Props) {
           transition={{ type: "spring", stiffness: 380, damping: 12 }}
           style={{
             position: "absolute",
-            top: "44%",
+            top: "22%",
             left: "50%",
             transform: "translate(-50%, -50%)",
             fontFamily: "Press Start 2P, monospace",
-            fontSize: isHost ? "9rem" : "4rem",
+            fontSize: isHost ? "7rem" : "4rem",
             color: "#ff2a4a",
             textShadow: "6px 6px 0 #2e2418, 0 0 80px #ff2a4a, 0 0 160px #ff5577",
             letterSpacing: 6,
